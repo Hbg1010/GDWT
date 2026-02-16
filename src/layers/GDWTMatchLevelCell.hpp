@@ -32,7 +32,7 @@ class GDWTMatchLevelCell : public CCNode {
         std::vector<std::pair<std::string, int>> scores;
         int highestScore;
 
-        EventListener<web::WebTask> downloadListener;
+        async::TaskHolder<web::WebResponse> downloadListener;
 
         Ref<CCImage> image;
 

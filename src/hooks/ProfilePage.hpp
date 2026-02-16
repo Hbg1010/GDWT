@@ -5,7 +5,6 @@ using namespace geode::prelude;
 
 #include <Geode/modify/ProfilePage.hpp>
 
-#include <alphalaneous.badges_api_reimagined/include/BadgesAPI.hpp>
 class $modify(GDWTProfilePage, ProfilePage) {
     /*
     struct Fields{
@@ -25,5 +24,5 @@ class $modify(GDWTProfilePage, ProfilePage) {
         void onBadgeClicked(CCObject* sender);
         */
 
-        static void isUserInBadge(const std::string& badgeID, const int& accountID, const Badge& badge);
+        //static void isUserInBadge(const std::string& badgeID, const int& accountID, const Badge& badge);
 };

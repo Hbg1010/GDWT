@@ -5,17 +5,22 @@
 
 using namespace geode::prelude;
 
-class GDWTMatchGroupLayer : public Popup<const MatchGroup&> {
+class GDWTMatchGroupLayer : public Popup {
     protected:
-        bool setup(const MatchGroup& _group) override;
+        bool init(const MatchGroup& _group);
     public:
         static GDWTMatchGroupLayer* create(const MatchGroup& _group);
+
+        arc::Future<std::vector<scoreCalcFuture::Output>> testFunc(MatchesFuture::Output _matches);
 
         void show() override;
 
         MatchGroup group;
 
-        EventListener<MatchesTask> l;
+        async::TaskHolder<MatchesFuture::Output> l;
 
-        EventListener<Task<std::vector<geode::Result<std::vector<std::tuple<std::string, int, int>>> *>>> scoresL;
+        async::TaskHolder<std::vector<scoreCalcFuture::Output>> scoresL;
+
+        ScrollLayer* matchesListLayer;
+        CCNode* alignmentNode;
 };

@@ -132,13 +132,13 @@ typedef struct{
     ScoreSystemType scoreType;
 } MatchGroup;
 
-using MatchesTask = Task<Result<std::vector<Match>>>;
-using TeamsTask = Task<Result<std::vector<Team>>>;
-using GDWTUserInfoTask = Task<std::vector<GDWTUserInfo*>>;
-using PlayerDataTask = Task<Result<std::vector<PlayerData>>>;
-using scoreCalcTask = Task<Result<std::vector<std::tuple<std::string, int, int>>>>;
-using MatchGroupsDataTask = Task<Result<std::vector<MatchGroup>>>;
-using CurrentMatchTask = Task<Result<std::map<std::string, std::pair<std::string, std::vector<std::string>>>>>;
+using MatchesFuture = arc::Future<Result<std::vector<Match>>>;
+using TeamsFuture = arc::Future<Result<std::vector<Team>>>;
+using GDWTUserInfoFuture = arc::Future<std::vector<GDWTUserInfo>>;
+using PlayerDataFuture = arc::Future<Result<std::vector<PlayerData>>>;
+using scoreCalcFuture = arc::Future<Result<std::vector<std::tuple<std::string, int, int>>>>;
+using MatchGroupsDataFuture = arc::Future<Result<std::vector<MatchGroup>>>;
+using CurrentMatchFuture = arc::Future<Result<std::map<std::string, std::pair<std::string, std::vector<std::string>>>>>;
 
 typedef struct{
     int code;
@@ -382,12 +382,12 @@ struct matjson::Serialize<std::vector<ZSAToggleSaveData>> {
 
 class data {
     public:
-        static MatchesTask getMatchesData();
-        static TeamsTask getTeamsData();
-        static GDWTUserInfoTask getUsersInfo(std::vector<int> userIDs);
-        static PlayerDataTask getPlayersData();
-        static MatchGroupsDataTask getMatchGroupsData();
-        static CurrentMatchTask getCurrentMatchData(std::string accessToken);
+        static MatchesFuture getMatchesData();
+        static TeamsFuture getTeamsData();
+        static GDWTUserInfoFuture getUsersInfo(std::vector<int> userIDs);
+        static PlayerDataFuture getPlayersData();
+        static MatchGroupsDataFuture getMatchGroupsData();
+        static CurrentMatchFuture getCurrentMatchData(std::string accessToken);
 
         static Result<GDWTUserInfo> parseUserInfo(std::string infoRaw);
 
@@ -403,7 +403,7 @@ class data {
         static CCImage* getImage(std::string ID);
         static void addImage(CCImage* image, std::string ID);
 
-        static scoreCalcTask calculateScores(std::vector<Level> levels, std::vector<std::string> expectedTeams, ScoreSystemType type);
+        static scoreCalcFuture calculateScores(std::vector<Level> levels, std::vector<std::string> expectedTeams, ScoreSystemType type);
 
         static CCNode* createCircleGlow(ccColor3B color, float opacity);
 
@@ -418,15 +418,15 @@ class data {
 
         static DiscordEmbed embedWithPlayerColor();
 
-        static Task<Result<>> SendDiscordMessage(DiscordMessage message);
-        static void SendSheetProgress(std::string message);
+        static arc::Future<Result<>> SendDiscordMessage(DiscordMessage message);
+        static arc::Future<Result<>> SendSheetProgress(std::string message);
 
         static int getCombo(int levelID, int precent);
         
         static std::string columnNumberToLetter(int colNum);
 
-        static Task<Result<std::string>> refreshAccessToken(std::string clientId, std::string clientSecret, std::string refreshToken);
-        static Task<Result<>> writeToGoogleSheet(std::string spreadsheetId, std::string range, std::string value, std::string accessToken);
+        static arc::Future<Result<std::string>> refreshAccessToken(std::string clientId, std::string clientSecret, std::string refreshToken);
+        static arc::Future<Result<>> writeToGoogleSheet(std::string spreadsheetId, std::string range, std::string value, std::string accessToken);
 
         static bool getCBF();
         static bool getCBFAllowed();

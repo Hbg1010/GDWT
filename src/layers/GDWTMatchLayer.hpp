@@ -7,17 +7,17 @@
 
 using namespace geode::prelude;
 
-class GDWTMatchLayer : public Popup<const Match&>, public LevelManagerDelegate {
+class GDWTMatchLayer : public Popup, public LevelManagerDelegate {
     protected:
-        bool setup(const Match& _matchs) override;
+        bool init(const Match& _matchs);
 
-        void onClose(cocos2d::CCObject*);
+        void onClose(cocos2d::CCObject*) override;
     public:
         static GDWTMatchLayer* create(const Match& _match);
 
         void show() override;
 
-        void update(float delta);
+        void update(float delta) override;
 
         Match match;
 
@@ -37,5 +37,5 @@ class GDWTMatchLayer : public Popup<const Match&>, public LevelManagerDelegate {
 
         std::vector<GDWTMatchLevelCell*> levelCells;
 
-        EventListener<scoreCalcTask> overallScoresListener;
+        async::TaskHolder<scoreCalcFuture::Output> overallScoresListener;
 };

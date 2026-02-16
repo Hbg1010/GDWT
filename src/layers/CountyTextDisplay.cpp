@@ -64,15 +64,13 @@ bool CountyTextDisplay::init(std::vector<std::string> _counrtyCodes, CCSize _siz
         }
     }
 
-    CCObject* child;
-    CCARRAY_FOREACH(scalingPoint->getChildren(), child){
-        auto n = static_cast<CCNode*>(child);
-        n->setPositionX(n->getPositionX() - (dictance - extra) / 2);
+    for (const auto& child : scalingPoint->getChildrenExt<CCNode*>())
+    {
+        child->setPositionX(child->getPositionX() - (dictance - extra) / 2);
     }
+    
     if (autoScale)
         scalingPoint->setScale(_size.width / ((dictance + extra)));
-
-
 
     return true;
 }

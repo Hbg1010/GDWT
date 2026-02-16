@@ -5,9 +5,9 @@
 
 using namespace geode::prelude;
 
-class GDWTTeamLayer : public Popup<const Team&> {
+class GDWTTeamLayer : public Popup {
     protected:
-        bool setup(const Team& _team) override;
+        bool init(const Team& _team);
     public:
         static GDWTTeamLayer* create(const Team& _team);
 

@@ -66,10 +66,11 @@ bool UserDisplay::init(int accountID, bool withName){
     IconLoadingC->setScale(0.25f);
     IconLoadingC->setParentLayer(loadingCLayer);
     IconLoadingC->show();
-        
-    Plistener.bind(this, &UserDisplay::onPlayerInfoReceved);
 
-    Plistener.setFilter(data::getPlayersData());
+    Plistener.spawn(
+        data::getPlayersData(),
+        [&](auto out){ UserDisplay::onPlayerInfoReceved(std::move(out)); }
+    );
 
     player->setPosition(hostButton->getContentSize() / 2);
 
@@ -112,133 +113,121 @@ void UserDisplay::userClicked(CCObject*){
         geode::Notification::create("Failed to fetch user info!", CCSprite::createWithSpriteFrameName("GJ_deleteIcon_001.png"))->show();
 }
 
-void UserDisplay::onPlayerInfoReceved(PlayerDataTask::Event* event){
-    if (auto _players = event->getValue()){
-        auto players = _players->unwrapOrDefault();
+void UserDisplay::onPlayerInfoReceved(PlayerDataFuture::Output _players){
+    auto players = _players.unwrapOrDefault();
 
-        if (!players.size()){
-            if (_players->isErr())
-                data::sendError(_players->unwrapErr());
-            return;
-        }
+    if (!players.size()){
+        if (_players.isErr())
+            data::sendError(_players.unwrapErr());
+        return;
+    }
 
-        bool doesExist = false;
+    bool doesExist = false;
 
-        for (int i = 0; i < players.size(); i++)
-        {
-            if (players[i].accountID == accID){
-                doesExist = true;
+    for (int i = 0; i < players.size(); i++)
+    {
+        if (players[i].accountID == accID){
+            doesExist = true;
 
-                player->updatePlayerFrame(players[i].iconID, IconType::Cube);
-                auto col1 = GameManager::get()->colorForIdx(players[i].color1ID);
-                player->setColor(col1);
-                player->setSecondColor(GameManager::get()->colorForIdx(players[i].color2ID));
-                player->m_outlineSprite->setVisible(players[i].glowEnabled);
+            player->updatePlayerFrame(players[i].iconID, IconType::Cube);
+            auto col1 = GameManager::get()->colorForIdx(players[i].color1ID);
+            player->setColor(col1);
+            player->setSecondColor(GameManager::get()->colorForIdx(players[i].color2ID));
+            player->m_outlineSprite->setVisible(players[i].glowEnabled);
 
-                ccColor3B colcom;
-                colcom = {0, 0, 0};
+            ccColor3B colcom;
+            colcom = {0, 0, 0};
 
-                if (col1 == colcom)
-                    player->m_outlineSprite->setVisible(true);
+            if (col1 == colcom)
+                player->m_outlineSprite->setVisible(true);
 
-                player->m_outlineSprite->setColor(GameManager::get()->colorForIdx(players[i].glowColorID));
-                if (nameLabel){
-                    nameLabel->setString(players[i].displayName.c_str());
-                    updateNameLength();
-                }
-
-                IconLoadingC->fadeAndRemove();
-                loadingCLayer->removeMeAndCleanup();
-
-                break;
+            player->m_outlineSprite->setColor(GameManager::get()->colorForIdx(players[i].glowColorID));
+            if (nameLabel){
+                nameLabel->setString(players[i].displayName.c_str());
+                updateNameLength();
             }
-        }
-        
-        if (!doesExist){
-            if (accID != -1){
-                Ulistener.bind(this, &UserDisplay::onDInfoReceved);
 
-                Ulistener.setFilter(data::getUsersInfo({accID}));
-            }
-            else{
-                IconLoadingC->fadeAndRemove();
-                loadingCLayer->removeMeAndCleanup();
-            }
+            IconLoadingC->fadeAndRemove();
+            loadingCLayer->removeMeAndCleanup();
+
+            break;
         }
     }
-}
-
-void UserDisplay::onDInfoReceved(GDWTUserInfoTask::Event* event) {
-    if (auto _users = event->getValue()){
-        auto users = *_users;
-        if (users.size()){
-            if (users[0]->accountID != -1){
-
-                player->updatePlayerFrame(users[0]->accIcon, IconType::Cube);
-                auto col1 = GameManager::get()->colorForIdx(users[0]->playerColor);
-                player->setColor(col1);
-                player->setSecondColor(GameManager::get()->colorForIdx(users[0]->playerColor2));
-                player->m_outlineSprite->setVisible(users[0]->accGlow);
-
-                ccColor3B colcom;
-                colcom = {0, 0, 0};
-
-                if (col1 == colcom)
-                    player->m_outlineSprite->setVisible(true);
-
-                player->m_outlineSprite->setColor(GameManager::get()->colorForIdx(users[0]->glowColor));
-
-                if (displayName.empty() && nameLabel){
-                    nameLabel->setString(users[0]->userName.c_str());
-                    updateNameLength();
-                }
-
-                Tlistener.bind([this] (TeamsTask::Event* e){
-                    if (auto _teams = e->getValue()){
-                        auto teams = _teams->unwrapOrDefault();
-
-                        if (!teams.size()){
-                            if (_teams->isErr())
-                                data::sendError(_teams->unwrapErr());
-                            return;
-                        }
-
-                        for (int i = 0; i < teams.size(); i++)
-                        {
-                            bool didFind = false;
-                            for (int a = 0; a < teams[i].accounts.size(); a++)
-                            {
-                                if (teams[i].accounts[a].displayName != "" && teams[i].accounts[a].accountID == accID){
-                                    nameLabel->setString(teams[i].accounts[a].displayName.c_str());
-                                    updateNameLength();
-                                    didFind = true;
-                                    break;
-                                }
-                            }
-                            if (didFind)
-                                break;
-                        }
-                        
-                    }
-                });
-
-                Tlistener.setFilter(data::getTeamsData());
-            }
-                
+    
+    if (!doesExist){
+        if (accID != -1){
+            Ulistener.spawn(
+                data::getUsersInfo({accID}),
+                [&](auto out){ UserDisplay::onDInfoReceved(std::move(out)); }
+            );
         }
         else{
             IconLoadingC->fadeAndRemove();
             loadingCLayer->removeMeAndCleanup();
         }
+    }
+}
 
+void UserDisplay::onDInfoReceved(GDWTUserInfoFuture::Output users) {
+    if (users.size()){
+        if (users[0].accountID != -1){
+
+            player->updatePlayerFrame(users[0].accIcon, IconType::Cube);
+            auto col1 = GameManager::get()->colorForIdx(users[0].playerColor);
+            player->setColor(col1);
+            player->setSecondColor(GameManager::get()->colorForIdx(users[0].playerColor2));
+            player->m_outlineSprite->setVisible(users[0].accGlow);
+
+            ccColor3B colcom;
+            colcom = {0, 0, 0};
+
+            if (col1 == colcom)
+                player->m_outlineSprite->setVisible(true);
+
+            player->m_outlineSprite->setColor(GameManager::get()->colorForIdx(users[0].glowColor));
+
+            if (displayName.empty() && nameLabel){
+                nameLabel->setString(users[0].userName.c_str());
+                updateNameLength();
+            }
+
+            Tlistener.spawn(
+                data::getTeamsData(),
+                [this] (TeamsFuture::Output _teams){
+                    auto teams = _teams.unwrapOrDefault();
+
+                    if (!teams.size()){
+                        if (_teams.isErr())
+                            data::sendError(_teams.unwrapErr());
+                        return;
+                    }
+
+                    for (int i = 0; i < teams.size(); i++)
+                    {
+                        bool didFind = false;
+                        for (int a = 0; a < teams[i].accounts.size(); a++)
+                        {
+                            if (teams[i].accounts[a].displayName != "" && teams[i].accounts[a].accountID == accID){
+                                nameLabel->setString(teams[i].accounts[a].displayName.c_str());
+                                updateNameLength();
+                                didFind = true;
+                                break;
+                            }
+                        }
+                        if (didFind)
+                            break;
+                    }
+                }
+            );
+        }
+    }
+    else{
         IconLoadingC->fadeAndRemove();
         loadingCLayer->removeMeAndCleanup();
     }
-    else if (event->isCancelled()){
-        IconLoadingC->fadeAndRemove();
-        loadingCLayer->removeMeAndCleanup();
-    }
-    
+
+    IconLoadingC->fadeAndRemove();
+    loadingCLayer->removeMeAndCleanup();
 }
 
 void UserDisplay::updateNameLength(){

@@ -4,14 +4,11 @@
 
 bool GDWTMenuLayer::init() {
 	if (!MenuLayer::init()) return false;
- 
-	data::getPlayersData().listen([] (Result<std::vector<PlayerData>>*){});
 
-	data::getTeamsData().listen([] (Result<std::vector<Team>>*){});
-
-    data::getMatchesData().listen([] (Result<std::vector<Match>>*){});
-
-	data::getMatchGroupsData().listen([] (Result<std::vector<MatchGroup>>*){});
+	async::spawn(data::getPlayersData());
+	async::spawn(data::getTeamsData());
+	async::spawn(data::getMatchesData());
+	async::spawn(data::getMatchGroupsData());
 
 	auto BMenu = this->getChildByID("bottom-menu");
 

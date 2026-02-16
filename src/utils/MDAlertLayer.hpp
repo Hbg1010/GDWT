@@ -4,9 +4,9 @@
 
 using namespace geode::prelude;
 
-class MDAlertLayer : public Popup<const std::string&, const std::string&, const std::string&, const std::function<void(bool)>&, const std::string&> {
+class MDAlertLayer : public Popup {
     protected:
-        bool setup(const std::string& title, const std::string& description, const std::string& btn1Name, const std::function<void(bool)>& callback, const std::string& btn2Name) override;
+        bool init(const std::string& title, const std::string& description, const std::string& btn1Name, const std::function<void(bool)>& callback, const std::string& btn2Name);
 
     public:
         static MDAlertLayer* create(const std::string& title, const std::string& description, const std::string& btn1Name = "OK", const std::function<void(bool)>& callback = NULL, const std::string& btn2Name = "NULL");

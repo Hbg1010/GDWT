@@ -45,12 +45,6 @@ void GDWTPlayLayer::levelComplete() {
     sendProgressMessage(100, this->m_level, combo);
 }
 
-void GDWTPlayLayer::onDiscordMessageSent(Task<Result<>>::Event* e){
-    if (auto* res = e->getValue()){
-
-    }
-}
-
 void GDWTPlayLayer::sendProgressMessage(int precent, GJGameLevel* level, int combo){
     if (data::getCBF()){
         m_fields->notifCBF = geode::Notification::create("Message was not sent! you have CBF on! please disable it!", nullptr, 3);
@@ -73,9 +67,31 @@ void GDWTPlayLayer::sendProgressMessage(int precent, GJGameLevel* level, int com
 
     message.embeds.push_back(embed);
 
-    m_fields->listener.bind(this, &GDWTPlayLayer::onDiscordMessageSent);
+    m_fields->listener.spawn(
+        [message, precent]() -> arc::Future<Result<>> {
+            auto discRes = co_await data::SendDiscordMessage(message);
 
-    m_fields->listener.setFilter(data::SendDiscordMessage(message));
+            auto sheetRes = co_await data::SendSheetProgress(std::to_string(precent));
 
-    data::SendSheetProgress(std::to_string(precent));
+            std::string errMessage = "Failed to send message! failes: ";
+            bool isErr = false;
+
+            if (discRes.isErr()){
+                errMessage += fmt::format("discord: {}", discRes.unwrapErr());
+                isErr = true;
+            }
+            if (sheetRes.isErr()){
+                errMessage += fmt::format("sheets: {}", sheetRes.unwrapErr());
+                isErr = true;
+            }
+
+            if (isErr)
+                co_return Err(errMessage);
+            
+            co_return Ok();
+        },
+        [](Result<> res){
+
+        }
+    );
 }

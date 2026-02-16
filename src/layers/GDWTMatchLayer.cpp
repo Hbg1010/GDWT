@@ -5,16 +5,18 @@
 
 GDWTMatchLayer* GDWTMatchLayer::create(const Match& _match) {
     auto ret = new GDWTMatchLayer();
-    if (ret && ret->initAnchored(390, 280, _match, "square01_001.png", {0.f, 0.f, 94.f, 94.f})) {
+    if (ret && ret->init(_match)) {
         ret->autorelease();
         return ret;
     }
-    CC_SAFE_DELETE(ret);
+    delete ret;
     return nullptr;
 }
 
 
-bool GDWTMatchLayer::setup(const Match& _match){
+bool GDWTMatchLayer::init(const Match& _match){
+    if (!Popup::init(390, 280, "square01_001.png", {0.f, 0.f, 94.f, 94.f}))
+        return false;
 
     match = _match;
 
@@ -274,13 +276,14 @@ bool GDWTMatchLayer::setup(const Match& _match){
 
     //
 
-    overallScoresListener.bind([cText, this] (scoreCalcTask::Event* e) {
-        if (auto _scores = e->getValue()){
-            auto scores = _scores->unwrapOrDefault();
+    overallScoresListener.spawn(
+        data::calculateScores(match.levels, match.teams, match.scoreType),
+        [cText, this] (scoreCalcFuture::Output _scores) {
+            auto scores = _scores.unwrapOrDefault();
 
             if (!scores.size()){
-                if (_scores->isErr())
-                    data::sendError(_scores->unwrapErr());
+                if (_scores.isErr())
+                    data::sendError(_scores.unwrapErr());
                 return;
             }
 
@@ -324,9 +327,7 @@ bool GDWTMatchLayer::setup(const Match& _match){
                 cText->scalingPoint->addChild(label);
             }
         }
-    });
-
-    overallScoresListener.setFilter(data::calculateScores(match.levels, match.teams, match.scoreType));
+    );
 
     scheduleUpdate();
 
@@ -434,5 +435,5 @@ void GDWTMatchLayer::loadLevelsFailed(char const* p0, int p1){
 
 void GDWTMatchLayer::onClose(cocos2d::CCObject* s){
     GameLevelManager::get()->m_levelManagerDelegate = nullptr;
-    Popup<const Match&>::onClose(s);
+    Popup::onClose(s);
 }

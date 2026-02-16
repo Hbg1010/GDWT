@@ -49,9 +49,10 @@ bool flagDisplay::init(int accountID, std::string countryCode){
     );
     menu->addChild(flagButton);
 
-    listener.bind(this, &flagDisplay::onTeamsInfo);
-
-    listener.setFilter(data::getTeamsData());
+    listener.spawn(
+        data::getTeamsData(),
+        [&](auto out){ flagDisplay::onTeamsInfo(out); }
+    );
 
     loadingCLayer = CCLayer::create();
     loadingCLayer->setPosition(-loadingCLayer->getContentSize() / 2);
@@ -69,54 +70,47 @@ void flagDisplay::flagClicked(CCObject*){
     GDWTTeamLayer::create(myTeam)->show();
 }
 
-void flagDisplay::onTeamsInfo(TeamsTask::Event* event){
-    if (auto _teams = event->getValue()){
-        auto teams = _teams->unwrapOrDefault();
-        
-        if (!teams.size()){
-            if (_teams->isErr())
-                data::sendError(_teams->unwrapErr());
-            return;
-        }
-        
-        for (int i = 0; i < teams.size(); i++){
-            if (cCode != ""){
-                std::string lowerCCode = teams[i].countryCode;
-                std::transform(lowerCCode.begin(), lowerCCode.end(), lowerCCode.begin(), ::tolower);
-                if (lowerCCode == cCode){
-                    myTeam = teams[i];
-                }
-            }
-            else{
-                bool hasFound = false;
-                for (int ac = 0; ac < teams[i].accounts.size(); ac++){
-                    if (teams[i].accounts[ac].accountID == accID){
-                        
-                        std::string lowerCCode = teams[i].countryCode;
-                        std::transform(lowerCCode.begin(), lowerCCode.end(), lowerCCode.begin(), ::tolower);
-
-                        auto newFlag = CCSprite::createWithSpriteFrameName(fmt::format("{}.png"_spr, lowerCCode).c_str());
-
-                        myTeam = teams[i];
-
-                        flagButton->setSprite(newFlag);
-                        hasFound = true;
-                        break;
-                    }
-                }
-                if (hasFound)
-                    break;    
-            }
-        }
-
-        IconLoadingC->fadeAndRemove();
-        loadingCLayer->removeMeAndCleanup();
-    }
-    else if (event->isCancelled()){
-        IconLoadingC->fadeAndRemove();
-        loadingCLayer->removeMeAndCleanup();
+void flagDisplay::onTeamsInfo(TeamsFuture::Output out){
+    auto teams = out.unwrapOrDefault();
+    
+    if (!teams.size()){
+        if (out.isErr())
+            data::sendError(out.unwrapErr());
+        return;
     }
     
+    for (int i = 0; i < teams.size(); i++){
+        if (cCode != ""){
+            std::string lowerCCode = teams[i].countryCode;
+            std::transform(lowerCCode.begin(), lowerCCode.end(), lowerCCode.begin(), ::tolower);
+            if (lowerCCode == cCode){
+                myTeam = teams[i];
+            }
+        }
+        else{
+            bool hasFound = false;
+            for (int ac = 0; ac < teams[i].accounts.size(); ac++){
+                if (teams[i].accounts[ac].accountID == accID){
+                    
+                    std::string lowerCCode = teams[i].countryCode;
+                    std::transform(lowerCCode.begin(), lowerCCode.end(), lowerCCode.begin(), ::tolower);
+
+                    auto newFlag = CCSprite::createWithSpriteFrameName(fmt::format("{}.png"_spr, lowerCCode).c_str());
+
+                    myTeam = teams[i];
+
+                    flagButton->setSprite(newFlag);
+                    hasFound = true;
+                    break;
+                }
+            }
+            if (hasFound)
+                break;    
+        }
+    }
+
+    IconLoadingC->fadeAndRemove();
+    loadingCLayer->removeMeAndCleanup();
 }
 
 

@@ -5,7 +5,7 @@
 
 GDWTMatchGroupLayer* GDWTMatchGroupLayer::create(const MatchGroup& _group) {
     auto ret = new GDWTMatchGroupLayer();
-    if (ret && ret->initAnchored(263, 210, _group, "square01_001.png", {0.f, 0.f, 94.f, 94.f})) {
+    if (ret && ret->init(_group)) {
         ret->autorelease();
         return ret;
     }
@@ -14,13 +14,15 @@ GDWTMatchGroupLayer* GDWTMatchGroupLayer::create(const MatchGroup& _group) {
 }
 
 
-bool GDWTMatchGroupLayer::setup(const MatchGroup& _group){
+bool GDWTMatchGroupLayer::init(const MatchGroup& _group){
+    if (!Popup::init(263, 210, "square01_001.png", {0.f, 0.f, 94.f, 94.f}))
+        return false;
 
     group = _group;
 
     this->setID("gdwt-match-group-layer");
 
-    auto alignmentNode = CCNode::create();
+    alignmentNode = CCNode::create();
     alignmentNode->setPosition(m_buttonMenu->getPosition());
     alignmentNode->setID("aligment-node");
     m_mainLayer->addChild(alignmentNode);
@@ -69,7 +71,7 @@ bool GDWTMatchGroupLayer::setup(const MatchGroup& _group){
     listBG->setContentSize({200, 70});
     matchesListCont->addChild(listBG);
 
-    auto matchesListLayer = ScrollLayer::create({200, 70});
+    matchesListLayer = ScrollLayer::create({200, 70});
     matchesListLayer->setPosition({-200 / 2, -84});
     matchesListLayer->m_contentLayer->setLayout(ColumnLayout::create()
         ->setAxisReverse(true)
@@ -79,15 +81,15 @@ bool GDWTMatchGroupLayer::setup(const MatchGroup& _group){
     );
     matchesListCont->addChild(matchesListLayer);
 
-    l.bind([this, matchesListLayer, alignmentNode] (MatchesTask::Event* event){
-        if (auto _matches = event->getValue()){
-            auto matches = _matches->unwrapOrDefault();
-
-            if (!matches.size()){
-                if (_matches->isErr())
-                    data::sendError(_matches->unwrapErr());
+    l.spawn(
+        data::getMatchesData(),
+        [&](auto out){
+            if (out.isErr())
+                data::sendError(out.unwrapErr());
+            if (!out.unwrap().size())
                 return;
-            }
+
+            auto matches = out.unwrapOrDefault();
 
             std::vector<Match> groupMatches;
 
@@ -97,12 +99,7 @@ bool GDWTMatchGroupLayer::setup(const MatchGroup& _group){
                     groupMatches.push_back(matches[i]);
             }
 
-            std::vector<std::tuple<std::string, int, bool>> ctd{};
-
-            std::vector<scoreCalcTask> tasks;
-
-            for (int i = 0; i < groupMatches.size(); i++)
-            {
+            for (int i = 0; i < groupMatches.size(); i++){
                 GDWTMatchCell* matchCell;
                 if ((i % 2) == 0)
                     matchCell = GDWTMatchCell::create(groupMatches[i], {matchesListLayer->getContentSize().width, 60});
@@ -110,25 +107,22 @@ bool GDWTMatchGroupLayer::setup(const MatchGroup& _group){
                     matchCell = GDWTMatchCell::create(groupMatches[i], {matchesListLayer->getContentSize().width, 60}, true);
 
                 matchesListLayer->m_contentLayer->addChild(matchCell);
-
-                tasks.push_back(data::calculateScores(groupMatches[i].levels, groupMatches[i].teams, groupMatches[i].scoreType));
             }
-            
+
             matchesListLayer->m_contentLayer->updateLayout();
             matchesListLayer->moveToTop();
 
-            scoresL.bind([this, alignmentNode] (Task<std::vector<Result<std::vector<std::tuple<std::string, int, int>>> *>>::Event* event){
-                if (auto _scores = event->getValue()){
-                    auto scores = *_scores;
-
+            scoresL.spawn(
+                testFunc(std::move(out)),
+                [&](std::vector<geode::Result<std::vector<std::tuple<std::string, int, int>>>> scores){
                     std::vector<std::tuple<std::string, int, bool, int>> ctd{};
 
                     for (int s = 0; s < scores.size(); s++)
                     {
-                        if (!scores[s]->isOk()){
+                        if (!scores[s].isOk()){
                             continue;
                         }
-                        auto matchScore = scores[s]->unwrap();
+                        auto matchScore = scores[s].unwrap();
 
                         for (int i = 0; i < matchScore.size(); i++)
                         {
@@ -174,15 +168,9 @@ bool GDWTMatchGroupLayer::setup(const MatchGroup& _group){
                     CDisp->setPosition({0, 30});
                     alignmentNode->addChild(CDisp);
                 }
-            });
-
-            scoresL.setFilter(scoreCalcTask::all(
-                std::move(tasks)
-            ));
+            );
         }
-    });
-
-    l.setFilter(data::getMatchesData());
+    );
 
     return true;
 };
@@ -192,4 +180,27 @@ void GDWTMatchGroupLayer::show(){
 
     this->setZOrder(scene->getChildrenCount() > 0 ? scene->getHighestChildZ() + 100 : 100);
     scene->addChild(this);
+}
+
+arc::Future<std::vector<scoreCalcFuture::Output>> GDWTMatchGroupLayer::testFunc(MatchesFuture::Output _matches){
+    auto matches = _matches.unwrapOrDefault();
+
+    std::vector<Match> groupMatches;
+
+    for (int i = 0; i < matches.size(); i++)
+    {
+        if (matches[i].groupID == group.groupID)
+            groupMatches.push_back(matches[i]);
+    }
+
+    std::vector<scoreCalcFuture::Output> scores{};
+
+    for (int i = 0; i < groupMatches.size(); i++)
+    {
+        auto calculated = co_await data::calculateScores(groupMatches[i].levels, groupMatches[i].teams, groupMatches[i].scoreType);
+
+        scores.push_back(calculated);
+    }
+
+    co_return scores;
 }

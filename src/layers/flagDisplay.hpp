@@ -35,7 +35,7 @@ class flagDisplay : public CCNode {
         float getScaledContentWidth();
         float getScaledContentHeight();
 
-        EventListener<TeamsTask> listener;
+        async::TaskHolder<TeamsFuture::Output> listener;
 
-        void onTeamsInfo(TeamsTask::Event* event);
+        void onTeamsInfo(TeamsFuture::Output out);
 };

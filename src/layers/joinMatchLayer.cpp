@@ -3,15 +3,17 @@
 
 joinMatchLayer* joinMatchLayer::create() {
     auto ret = new joinMatchLayer();
-    if (ret && ret->initAnchored(215, 125, "square01_001.png", {0.f, 0.f, 94.f, 94.f})) {
+    if (ret && ret->init()) {
         ret->autorelease();
         return ret;
     }
-    CC_SAFE_DELETE(ret);
+    delete ret;
     return nullptr;
 }
 
-bool joinMatchLayer::setup(){
+bool joinMatchLayer::init(){
+    if (!Popup::init(215, 125, "square01_001.png", {0.f, 0.f, 94.f, 94.f}))
+        return false;
 
     this->setTitle("Join Match");
 

@@ -52,226 +52,205 @@ CCNode* data::m_target = nullptr;
 
 // == functions ==
 
-MatchesTask data::getMatchesData(){
+MatchesFuture data::getMatchesData(){
     if (loadedMatches.size()){
-        return MatchesTask::run(
-        [] (auto progress, auto hasBeenCancelled) -> MatchesTask::Result{
-            return Ok(data::loadedMatches);
-        });
+        co_return Ok(data::loadedMatches);
     }
 
     web::WebRequest req = web::WebRequest();
 
     //req.param("key", apiKey);
 
-    return req.get(fmt::format("https://docs.google.com/spreadsheets/d/{}/gviz/tq?tqx=out:csv&sheet={}", SheetID, matchesPageID)).map(
-    [] (web::WebResponse* res) -> Result<std::vector<Match>> {
+    auto res = co_await req.get(fmt::format("https://docs.google.com/spreadsheets/d/{}/gviz/tq?tqx=out:csv&sheet={}", SheetID, matchesPageID));
 
-        GEODE_UNWRAP_INTO(auto sheetString, res->string());
+    GEODE_CO_UNWRAP_INTO(auto sheetString, res.string());
 
-        auto matches = std::vector<Match>{};
+    auto matches = std::vector<Match>{};
 
-        if (sheetString.empty()){
-            return Err("failed to get matches");
-        }
+    if (sheetString.empty()){
+        co_return Err("failed to get matches");
+    }
 
-        std::vector<std::vector<std::string>> values = convertRawData(sheetString, true);
-                    
-        for (int r = 0; r < values.size(); r++)
-        {
-            if (values[r].size() - 1 != 9) continue;
-            
-            Match currMatch;
-
-            currMatch.matchName = values[r][7];
-            
-            auto hosts = splitStr(values[r][0], ";");
-            
-            for (int i = 0; i < hosts.size(); i++)
-            {
-                if (hosts[i] == "NA")
-                    break;
-                Host h;
-                auto splittedHost = splitStr(hosts[i], ",");
-                h.displayName = splittedHost[0];
-                h.accountID = geode::utils::numFromString<int>(splittedHost[1]).unwrapOr(-1);
-
-                currMatch.hosts.push_back(h);
-            }
-            
-            auto coHosts = splitStr(values[r][1], ";");
-            
-            for (int i = 0; i < coHosts.size(); i++)
-            {
-                if (coHosts[i] == "NA")
-                    break;
-                Host coh;
-                auto splittedcoHost = splitStr(coHosts[i], ",");
-                coh.displayName = splittedcoHost[0];
-                coh.accountID = geode::utils::numFromString<int>(splittedcoHost[1]).unwrapOr(-1);
-
-                currMatch.coHosts.push_back(coh);
-            }
-
-            currMatch.dateUnix = geode::utils::numFromString<long long>(values[r][2]).unwrapOr(-1);
-
-            time_t time = currMatch.dateUnix;
-            auto tm = std::localtime(&time);
-            currMatch.date = fmt::format("{}/{}/{}", tm->tm_mon + 1, tm->tm_mday, tm->tm_year + 1900);
-
-            currMatch.teams = splitStr(values[r][3], ",");
-            auto splittedLevels = splitStr(values[r][4], ";");
-            
-            if (values[r][4] == "NA" || values[r][4].empty())
-                splittedLevels.clear();
-
-            for (int i = 0; i < splittedLevels.size(); i++)
-            {
-                auto splittedLevel = splitStr(splittedLevels[i], ",");
-                Level level;
+    std::vector<std::vector<std::string>> values = convertRawData(sheetString, true);
                 
-                auto splittedLevelStats = splitStr(splittedLevel[0], "-");
+    for (int r = 0; r < values.size(); r++)
+    {
+        if (values[r].size() - 1 != 9) continue;
+        
+        Match currMatch;
 
-                level.levelID = geode::utils::numFromString<int>(splittedLevelStats[0]).unwrapOr(-1);
-                if (splittedLevelStats.size() > 1)
-                    level.playTime = geode::utils::numFromString<int>(splittedLevelStats[1]).unwrapOr(-1);
-                if (splittedLevel.size() > 1)
-                    for (int d = 1; d < splittedLevel.size(); d++)
-                    {
-                        auto pdata = splitStr(splittedLevel[d], "-");
+        currMatch.matchName = values[r][7];
+        
+        auto hosts = splitStr(values[r][0], ";");
+        
+        for (int i = 0; i < hosts.size(); i++)
+        {
+            if (hosts[i] == "NA")
+                break;
+            Host h;
+            auto splittedHost = splitStr(hosts[i], ",");
+            h.displayName = splittedHost[0];
+            h.accountID = geode::utils::numFromString<int>(splittedHost[1]).unwrapOr(-1);
 
-                        auto pdata1 = geode::utils::numFromString<int>(pdata[0]);
-                        auto pdata2 = geode::utils::numFromString<int>(pdata[1]);
+            currMatch.hosts.push_back(h);
+        }
+        
+        auto coHosts = splitStr(values[r][1], ";");
+        
+        for (int i = 0; i < coHosts.size(); i++)
+        {
+            if (coHosts[i] == "NA")
+                break;
+            Host coh;
+            auto splittedcoHost = splitStr(coHosts[i], ",");
+            coh.displayName = splittedcoHost[0];
+            coh.accountID = geode::utils::numFromString<int>(splittedcoHost[1]).unwrapOr(-1);
 
-                        if (pdata1.isOk() && pdata2.isOk()){
-                            auto toAdd = std::tuple<int, int, std::string>{pdata1.unwrap(), 0, "default"};
-
-                            if (pdata.size() > 1){
-                                std::get<1>(toAdd) = geode::utils::numFromString<int>(pdata[1]).unwrapOr(-1);
-                            }
-                            if (pdata.size() > 2){
-                                std::get<2>(toAdd) = pdata2.unwrap();
-                            }
-                            level.accountIDs.push_back(toAdd);
-                        }
-                        else {
-                            auto toAdd = std::tuple<std::string, std::string, int>{pdata[0], pdata[1], 0};
-
-                            if (pdata.size() > 2){
-                                std::get<2>(toAdd) = geode::utils::numFromString<int>(pdata[2]).unwrapOr(-1);
-                            }
-
-                            if (pdata[0].find(' ') != std::string::npos)
-                                log::warn("Account ID for player {} in match \"{}\" contains a space!", pdata[0], currMatch.matchName);
-                            
-                            level.displayNames.push_back(toAdd);
-                        }
-
-
-                    }
-                currMatch.levels.push_back(level);
-            }
-
-            currMatch.liveLink = values[r][5];
-            currMatch.vodLink = values[r][6];
-            
-            currMatch.scoreType = static_cast<ScoreSystemType>(geode::utils::numFromString<int>(values[r][8]).unwrapOr(0));
-            currMatch.groupID = geode::utils::numFromString<int>(values[r][9]).unwrapOr(-1);
-
-            matches.push_back(currMatch);
+            currMatch.coHosts.push_back(coh);
         }
 
-        std::ranges::sort(matches, [](const Match a, const Match b) {
+        currMatch.dateUnix = geode::utils::numFromString<long long>(values[r][2]).unwrapOr(-1);
 
-            return b.dateUnix < a.dateUnix;
-        });
+        time_t time = currMatch.dateUnix;
+        auto tm = std::localtime(&time);
+        currMatch.date = fmt::format("{}/{}/{}", tm->tm_mon + 1, tm->tm_mday, tm->tm_year + 1900);
+
+        currMatch.teams = splitStr(values[r][3], ",");
+        auto splittedLevels = splitStr(values[r][4], ";");
         
-        loadMatches(matches);
+        if (values[r][4] == "NA" || values[r][4].empty())
+            splittedLevels.clear();
 
-        return Ok(matches);  
-    },
-    [](auto) -> std::monostate {
-        return std::monostate();
+        for (int i = 0; i < splittedLevels.size(); i++)
+        {
+            auto splittedLevel = splitStr(splittedLevels[i], ",");
+            Level level;
+            
+            auto splittedLevelStats = splitStr(splittedLevel[0], "-");
+
+            level.levelID = geode::utils::numFromString<int>(splittedLevelStats[0]).unwrapOr(-1);
+            if (splittedLevelStats.size() > 1)
+                level.playTime = geode::utils::numFromString<int>(splittedLevelStats[1]).unwrapOr(-1);
+            if (splittedLevel.size() > 1)
+                for (int d = 1; d < splittedLevel.size(); d++)
+                {
+                    auto pdata = splitStr(splittedLevel[d], "-");
+
+                    auto pdata1 = geode::utils::numFromString<int>(pdata[0]);
+                    auto pdata2 = geode::utils::numFromString<int>(pdata[1]);
+
+                    if (pdata1.isOk() && pdata2.isOk()){
+                        auto toAdd = std::tuple<int, int, std::string>{pdata1.unwrap(), 0, "default"};
+
+                        if (pdata.size() > 1){
+                            std::get<1>(toAdd) = geode::utils::numFromString<int>(pdata[1]).unwrapOr(-1);
+                        }
+                        if (pdata.size() > 2){
+                            std::get<2>(toAdd) = pdata2.unwrap();
+                        }
+                        level.accountIDs.push_back(toAdd);
+                    }
+                    else {
+                        auto toAdd = std::tuple<std::string, std::string, int>{pdata[0], pdata[1], 0};
+
+                        if (pdata.size() > 2){
+                            std::get<2>(toAdd) = geode::utils::numFromString<int>(pdata[2]).unwrapOr(-1);
+                        }
+
+                        if (pdata[0].find(' ') != std::string::npos)
+                            log::warn("Account ID for player {} in match \"{}\" contains a space!", pdata[0], currMatch.matchName);
+                        
+                        level.displayNames.push_back(toAdd);
+                    }
+
+
+                }
+            currMatch.levels.push_back(level);
+        }
+
+        currMatch.liveLink = values[r][5];
+        currMatch.vodLink = values[r][6];
+        
+        currMatch.scoreType = static_cast<ScoreSystemType>(geode::utils::numFromString<int>(values[r][8]).unwrapOr(0));
+        currMatch.groupID = geode::utils::numFromString<int>(values[r][9]).unwrapOr(-1);
+
+        matches.push_back(currMatch);
+    }
+
+    std::ranges::sort(matches, [](const Match a, const Match b) {
+        return b.dateUnix < a.dateUnix;
     });
+    
+    loadMatches(matches);
+
+    co_return Ok(matches);
 }
 
-TeamsTask data::getTeamsData(){
+TeamsFuture data::getTeamsData(){
     if (loadedTeams.size()){
-        return TeamsTask::run(
-        [] (auto progress, auto hasBeenCancelled) -> TeamsTask::Result{
-            return Ok(data::loadedTeams);
-        });
+        co_return Ok(data::loadedTeams);
     }
 
     web::WebRequest req = web::WebRequest();
 
     req.param("majorDimension", "COLUMNS");
 
-    return getPlayersData().map(
-    [] (Result<std::vector<PlayerData>>* pDataRes) -> Result<std::vector<Team>> {
-        if (pDataRes != nullptr){
-            auto players = pDataRes->unwrapOrDefault();
+    auto pDataRes = co_await getPlayersData();
 
-            if (!players.size()){
-                if (pDataRes->isErr())
-                    data::sendError(pDataRes->unwrapErr());
-                return Err("failed to get teams");
+    auto players = pDataRes.unwrapOrDefault();
+
+    if (!players.size()){
+        if (pDataRes.isErr())
+            data::sendError(pDataRes.unwrapErr());
+        co_return Err("failed to get teams");
+    }
+
+    std::vector<Team> teams{};
+
+    for (int p = 0; p < players.size(); p++)
+    {
+        if (players[p].countryCode == "N/A") continue;
+
+        bool doesnMyTeamExist = false;
+
+        for (int i = 0; i < teams.size(); i++)
+        {
+            if (teams[i].countryCode == players[p].countryCode){
+                doesnMyTeamExist = true;
+                teams[i].accounts.push_back(players[p]);
+                break;
             }
+        }
 
-            std::vector<Team> teams{};
-
-            for (int p = 0; p < players.size(); p++)
-            {
-                if (players[p].countryCode == "N/A") continue;
-
-                bool doesnMyTeamExist = false;
-
-                for (int i = 0; i < teams.size(); i++)
-                {
-                    if (teams[i].countryCode == players[p].countryCode){
-                        doesnMyTeamExist = true;
-                        teams[i].accounts.push_back(players[p]);
-                        break;
-                    }
-                }
-
-                if (doesnMyTeamExist){
-                    continue;
-                }
-                else{
-                    Team team;
-                    team.countryCode = players[p].countryCode;
-                    team.regionCode = players[p].regionCode;
-                    team.accounts.push_back(players[p]);
-                    teams.push_back(team);
-                }
-            }
-
-            std::ranges::sort(teams, [](const Team& a, const Team& b) {
-                if (a.regionCode == b.regionCode) {
-                    return a.countryCode < b.countryCode; 
-                }
-
-                if (a.regionCode == "A") return true;
-                if (b.regionCode == "A") return false;
-
-                if (a.regionCode == "EU") return true;
-                if (b.regionCode == "EU") return false;
-
-                return a.regionCode < b.regionCode;
-            });
-            
-            loadTeams(teams);
-            
-            return Ok(teams);
+        if (doesnMyTeamExist){
+            continue;
         }
         else{
-            return Err("failed to get teams");
+            Team team;
+            team.countryCode = players[p].countryCode;
+            team.regionCode = players[p].regionCode;
+            team.accounts.push_back(players[p]);
+            teams.push_back(team);
         }
-    },
-    [](auto) -> std::monostate {
-        return std::monostate();
+    }
+
+    std::ranges::sort(teams, [](const Team& a, const Team& b) {
+        if (a.regionCode == b.regionCode) {
+            return a.countryCode < b.countryCode; 
+        }
+
+        if (a.regionCode == "A") return true;
+        if (b.regionCode == "A") return false;
+
+        if (a.regionCode == "EU") return true;
+        if (b.regionCode == "EU") return false;
+
+        return a.regionCode < b.regionCode;
     });
+    
+    loadTeams(teams);
+    
+    co_return Ok(teams);
 }
 
 std::vector<std::string> data::splitStr(std::string str, std::string delim) {
@@ -366,7 +345,7 @@ std::vector<std::vector<std::string>> data::convertRawData(std::string data, boo
     return values;         
 }
 
-GDWTUserInfoTask data::getUsersInfo(std::vector<int> userIDs){
+GDWTUserInfoFuture data::getUsersInfo(std::vector<int> userIDs){
 
     std::vector<GDWTUserInfo> alreadyLoadedUsers{};
 
@@ -390,7 +369,7 @@ GDWTUserInfoTask data::getUsersInfo(std::vector<int> userIDs){
         }
     }
 
-    std::vector<Task<GDWTUserInfo>> tasks;
+    std::vector<GDWTUserInfo> usersToReturn{};
 
     for (int i = 0; i < userIDs.size(); i++)
     {
@@ -403,29 +382,26 @@ GDWTUserInfoTask data::getUsersInfo(std::vector<int> userIDs){
 
             req.bodyString(fmt::format("secret=Wmfd2893gb7&targetAccountID={}", userIDs[i]));
 
-            tasks.push_back(req.post("http://www.boomlings.com/database/getGJUserInfo20.php").map(
-            [] (web::WebResponse* res) -> GDWTUserInfo{
-                
-                GDWTUserInfo errUser{};
-                errUser.accountID = -1;
+            auto res = co_await req.post("http://www.boomlings.com/database/getGJUserInfo20.php");
 
-                auto userInfoString = res->string().unwrapOr("-1");
+            GDWTUserInfo errUser{};
+            errUser.accountID = -1;
 
-                if (userInfoString == "-1"){
-                    return errUser;
-                }
-                auto InfoRes = data::parseUserInfo(userInfoString);
-                if (!InfoRes.isOk()){
-                    return errUser;
-                }
+            auto userInfoString = res.string().unwrapOr("-1");
 
-                data::loadUserInfo(InfoRes.unwrap());
+            if (userInfoString == "-1"){
+                usersToReturn.push_back(errUser);
+                continue;
+            }
+            auto InfoRes = data::parseUserInfo(userInfoString);
+            if (!InfoRes.isOk()){
+                usersToReturn.push_back(errUser);
+                continue;
+            }
 
-                return InfoRes.unwrap();
-            },
-            [](auto) -> std::monostate {
-                return std::monostate();
-            }));
+            data::loadUserInfo(InfoRes.unwrap());
+
+            usersToReturn.push_back(InfoRes.unwrap());
         }
         
     }
@@ -434,17 +410,11 @@ GDWTUserInfoTask data::getUsersInfo(std::vector<int> userIDs){
     {
         GDWTUserInfo info = alreadyLoadedUsers[i];
 
-        tasks.push_back(Task<GDWTUserInfo>::run(
-        [info] (auto progress, auto hasBeenCancelled) -> Task<GDWTUserInfo>::Result{
-            return info;
-        }));
+        usersToReturn.push_back(info);
     }
     
 
-    return Task<GDWTUserInfo>::all(
-        std::move(tasks)
-    );
-    
+    co_return usersToReturn;
 }
 
 Result<GDWTUserInfo> data::parseUserInfo(std::string infoRaw){
@@ -583,80 +553,72 @@ void data::loadLevel(GJGameLevel* level){
     loadedLevels.push_back(level);
 }
 
-PlayerDataTask data::getPlayersData(){
-        if (LoadedPlayers.size()){
-        return PlayerDataTask::run(
-        [] (auto progress, auto hasBeenCancelled) -> PlayerDataTask::Result{
-            return Ok(data::LoadedPlayers);
-        });
+PlayerDataFuture data::getPlayersData(){
+    if (LoadedPlayers.size()){
+        co_return Ok(data::LoadedPlayers);
     }
 
     web::WebRequest req = web::WebRequest();
 
     //req.param("key", apiKey);
 
-    return req.get(fmt::format("https://docs.google.com/spreadsheets/d/{}/gviz/tq?tqx=out:csv&sheet={}", SheetID, playersPageID)).map(
-    [] (web::WebResponse* res) -> Result<std::vector<PlayerData>> {
+    auto res = co_await req.get(fmt::format("https://docs.google.com/spreadsheets/d/{}/gviz/tq?tqx=out:csv&sheet={}", SheetID, playersPageID));
 
-        GEODE_UNWRAP_INTO(auto resString, res->string());
+    GEODE_CO_UNWRAP_INTO(auto resString, res.string());
 
-        auto players = std::vector<PlayerData>{};
+    auto players = std::vector<PlayerData>{};
 
-        if (resString.empty()){
-            return Err("failed to get players");
-        }
+    if (resString.empty()){
+        co_return Err("failed to get players");
+    }
 
-        std::vector<std::vector<std::string>> values = convertRawData(resString, true);
+    std::vector<std::vector<std::string>> values = convertRawData(resString, true);
+    
+    for (int r = 0; r < values.size(); r++)
+    {
+        if (values[r].size() - 1 != 7) continue;
+
+        PlayerData currPlayer;
+
+        currPlayer.countryCode = values[r][0];
+        currPlayer.regionCode = values[r][1];
+
+        currPlayer.accountID = geode::utils::numFromString<int>(values[r][2]).unwrapOr(-1);
+        currPlayer.displayName = values[r][3];
+
+        auto iconInfo = splitStr(values[r][4], ",");
         
-        for (int r = 0; r < values.size(); r++)
+        if (iconInfo.size() == 5){
+            currPlayer.iconID = geode::utils::numFromString<int>(iconInfo[0]).unwrapOr(-1);
+            currPlayer.color1ID = geode::utils::numFromString<int>(iconInfo[1]).unwrapOr(-1);
+            currPlayer.color2ID = geode::utils::numFromString<int>(iconInfo[2]).unwrapOr(-1);
+            currPlayer.glowEnabled = iconInfo[3] == "1";
+            currPlayer.glowColorID = geode::utils::numFromString<int>(iconInfo[4]).unwrapOr(-1);
+        }
+        
+        currPlayer.isActive = values[r][5] != "1";
+
+        auto staffIDs = splitStr(values[r][6], ",");
+
+        for (const auto& ID : staffIDs)
         {
-            if (values[r].size() - 1 != 7) continue;
-
-            PlayerData currPlayer;
-
-            currPlayer.countryCode = values[r][0];
-            currPlayer.regionCode = values[r][1];
-
-            currPlayer.accountID = geode::utils::numFromString<int>(values[r][2]).unwrapOr(-1);
-            currPlayer.displayName = values[r][3];
-
-            auto iconInfo = splitStr(values[r][4], ",");
-            
-            if (iconInfo.size() == 5){
-                currPlayer.iconID = geode::utils::numFromString<int>(iconInfo[0]).unwrapOr(-1);
-                currPlayer.color1ID = geode::utils::numFromString<int>(iconInfo[1]).unwrapOr(-1);
-                currPlayer.color2ID = geode::utils::numFromString<int>(iconInfo[2]).unwrapOr(-1);
-                currPlayer.glowEnabled = iconInfo[3] == "1";
-                currPlayer.glowColorID = geode::utils::numFromString<int>(iconInfo[4]).unwrapOr(-1);
-            }
-            
-            currPlayer.isActive = values[r][5] != "1";
-
-            auto staffIDs = splitStr(values[r][6], ",");
-
-            for (const auto& ID : staffIDs)
-            {
-                currPlayer.staffIDs.emplace(ID);
-            }
-
-            auto AchievementIDs = splitStr(values[r][7], ",");
-
-            for (const auto& ID : AchievementIDs)
-            {
-                currPlayer.achievementIDs.emplace(ID);
-            }
-
-            players.push_back(currPlayer);
+            currPlayer.staffIDs.emplace(ID);
         }
-        
-        LoadedPlayers.clear();
-        LoadedPlayers = players;
 
-        return Ok(players);  
-    },
-    [](auto) -> std::monostate {
-        return std::monostate();
-    });
+        auto AchievementIDs = splitStr(values[r][7], ",");
+
+        for (const auto& ID : AchievementIDs)
+        {
+            currPlayer.achievementIDs.emplace(ID);
+        }
+
+        players.push_back(currPlayer);
+    }
+    
+    LoadedPlayers.clear();
+    LoadedPlayers = players;
+
+    co_return Ok(players);
 }
 
 void data::addImage(CCImage* image, std::string ID){
@@ -667,184 +629,179 @@ CCImage* data::getImage(std::string ID){
     return dynamic_cast<CCImage*>(loadedImages->objectForKey(ID));
 }
 
-scoreCalcTask data::calculateScores(std::vector<Level> levels, std::vector<std::string> expectedTeams, ScoreSystemType type){
-    return getTeamsData().map(
-        [levels, expectedTeams, type] (Result<std::vector<Team>>* _teams) -> Result<std::vector<std::tuple<std::string, int, int>>> {
+scoreCalcFuture data::calculateScores(std::vector<Level> levels, std::vector<std::string> expectedTeams, ScoreSystemType type){
+    auto _teams = co_await getTeamsData();
 
-        GEODE_UNWRAP_INTO(auto teams, *_teams);
+    GEODE_CO_UNWRAP_INTO(auto teams, _teams);
 
-        std::vector<std::tuple<std::string, int, int>> toReturn{};
+    std::vector<std::tuple<std::string, int, int>> toReturn{};
 
-        std::map<std::string, std::pair<int, int>> overallScores{};
+    std::map<std::string, std::pair<int, int>> overallScores{};
 
-        for (int i = 0; i < levels.size(); i++)
+    for (int i = 0; i < levels.size(); i++)
+    {
+        //get level players teams
+        std::vector<std::tuple<std::string, int>> players{};
+        for (int p = 0; p < levels[i].accountIDs.size(); p++)
         {
-            //get level players teams
-            std::vector<std::tuple<std::string, int>> players{};
-            for (int p = 0; p < levels[i].accountIDs.size(); p++)
-            {
-                std::string cc = "NA";
-                for (int t = 0; t < teams.size(); t++){
-                    if (teams[t].countryCode == std::get<2>(levels[i].accountIDs[p])){
-                        cc = teams[t].countryCode;
-                        std::transform(cc.begin(), cc.end(), cc.begin(), ::tolower);
-                        break;
-                    }
-                    
-                    for (int ac = 0; ac < teams[t].accounts.size(); ac++){
-                        if (teams[t].accounts[ac].accountID == std::get<0>(levels[i].accountIDs[p])){
-                            cc = teams[t].countryCode;
-                            std::transform(cc.begin(), cc.end(), cc.begin(), ::tolower);
-                        }
-                    }
-                }
-
-                int currScore = std::get<1>(levels[i].accountIDs[p]);
-
-                players.push_back(std::tuple<std::string, int>{cc, currScore});
-            }
-            
-            for (int p = 0; p < levels[i].displayNames.size(); p++)
-            {
-                std::string cc = std::get<1>(levels[i].displayNames[p]);
-                std::transform(cc.begin(), cc.end(), cc.begin(), ::tolower);
-
-                int currScore = std::get<2>(levels[i].displayNames[p]);
-
-                for (int t = 0; t < teams.size(); t++){
-                    bool hasFound = false;
-                    for (int ac = 0; ac < teams[t].accounts.size(); ac++){
-                        if (teams[t].accounts[ac].accountID == std::get<0>(levels[i].accountIDs[p])){
-                            cc = teams[t].countryCode;
-                            std::transform(cc.begin(), cc.end(), cc.begin(), ::tolower);
-                        }
-                    }
-                }
-
-                players.push_back(std::tuple<std::string, int>{cc, currScore});
-            }
-
-            //add missing teams
-            for (int t = 0; t < expectedTeams.size(); t++)
-            {
-                std::string lowerTeamCCode = expectedTeams[t];
-                std::transform(lowerTeamCCode.begin(), lowerTeamCCode.end(), lowerTeamCCode.begin(), ::tolower);
-
-                bool doesTeamExist = false;
-                for (int p = 0; p < players.size(); p++)
-                {
-                    if (std::get<0>(players[p]) == lowerTeamCCode)
-                        doesTeamExist = true;
+            std::string cc = "NA";
+            for (int t = 0; t < teams.size(); t++){
+                if (teams[t].countryCode == std::get<2>(levels[i].accountIDs[p])){
+                    cc = teams[t].countryCode;
+                    std::transform(cc.begin(), cc.end(), cc.begin(), ::tolower);
+                    break;
                 }
                 
-                if (!doesTeamExist){
-                    players.push_back(std::tuple<std::string, int>{lowerTeamCCode, 0});
+                for (int ac = 0; ac < teams[t].accounts.size(); ac++){
+                    if (teams[t].accounts[ac].accountID == std::get<0>(levels[i].accountIDs[p])){
+                        cc = teams[t].countryCode;
+                        std::transform(cc.begin(), cc.end(), cc.begin(), ::tolower);
+                    }
                 }
             }
-            
-            //sort by placement
-            std::ranges::sort(players, [](const std::tuple<std::string, int> a, const std::tuple<std::string, int> b) {
-                auto scoreA = std::get<1>(a);
-                auto scoreB = std::get<1>(b);
 
-                return scoreA < scoreB;
-            });
-            
-            //calc windraw
-            if (type == ScoreSystemType::WinDraw || type == ScoreSystemType::WinDrawT2 || type == ScoreSystemType::WinDrawTimes2){
-                //get a list of all ties in the match
-                int currHighest = 0;
-                std::map<int, std::vector<std::pair<int, int>>> tiedScores;
-                for (int p = 0; p < players.size(); p++)
-                {
-                    int score = p;
-                    if (type == ScoreSystemType::WinDrawTimes2)
-                        score *= 2;
+            int currScore = std::get<1>(levels[i].accountIDs[p]);
 
-                    if (currHighest == std::get<1>(players[p]) && currHighest != 0){
-                        if (tiedScores.contains(currHighest))
-                            tiedScores[currHighest].push_back(std::pair<int, int>{score, std::get<1>(players[p])});
-                        else
-                            tiedScores.insert(std::pair<int, std::vector<std::pair<int, int>>>{currHighest, std::vector<std::pair<int, int>>{{score, std::get<1>(players[p])}}});
+            players.push_back(std::tuple<std::string, int>{cc, currScore});
+        }
+        
+        for (int p = 0; p < levels[i].displayNames.size(); p++)
+        {
+            std::string cc = std::get<1>(levels[i].displayNames[p]);
+            std::transform(cc.begin(), cc.end(), cc.begin(), ::tolower);
+
+            int currScore = std::get<2>(levels[i].displayNames[p]);
+
+            for (int t = 0; t < teams.size(); t++){
+                bool hasFound = false;
+                for (int ac = 0; ac < teams[t].accounts.size(); ac++){
+                    if (teams[t].accounts[ac].accountID == std::get<0>(levels[i].accountIDs[p])){
+                        cc = teams[t].countryCode;
+                        std::transform(cc.begin(), cc.end(), cc.begin(), ::tolower);
                     }
-
-                    currHighest = std::get<1>(players[p]);
-                }
-
-                //calc
-                for (int placement = 0; placement < players.size(); placement++)
-                {
-                    std::string keyCC = std::get<0>(players[placement]);
-                    int score = 0;
-
-                    score = placement;
-                    if (type == ScoreSystemType::WinDrawTimes2)
-                        score *= 2;
-
-                    int playerScore = std::get<1>(players[placement]);
-
-                    if (tiedScores.contains(playerScore)){
-                        int tiePoints = 0;
-                        for (int p = 0; p < tiedScores[playerScore].size(); p++)
-                        {
-                            tiePoints += tiedScores[playerScore][p].first;
-                        }
-                        score = tiePoints / tiedScores[playerScore].size();
-                    }
-
-                    bool found = false;
-
-                    for (int c = 0; c < toReturn.size(); c++)
-                    {
-                        if (std::get<0>(toReturn[c]) == keyCC){
-                            std::get<1>(toReturn[c]) += score;
-                            std::get<2>(toReturn[c]) += playerScore;
-                            found = true;
-                        }
-                    }
-
-                    if (!found)
-                        toReturn.push_back(std::tuple<std::string, int, int>{keyCC, score, playerScore});
-                }
-
-            }
-            //calc addition
-            else if (type == ScoreSystemType::Addition || type == ScoreSystemType::AdditionT2){
-                for (int placement = 0; placement < players.size(); placement++)
-                {
-                    std::string keyCC = std::get<0>(players[placement]);
-                    int score = std::get<1>(players[placement]);
-
-                    bool found = false;
-
-                    for (int c = 0; c < toReturn.size(); c++)
-                    {
-                        if (std::get<0>(toReturn[c]) == keyCC){
-                            std::get<1>(toReturn[c]) += score;
-                            std::get<2>(toReturn[c]) += score;
-                            found = true;
-                        }
-                    }
-
-                    if (!found)
-                        toReturn.push_back(std::tuple<std::string, int, int>{keyCC, score, score});
                 }
             }
+
+            players.push_back(std::tuple<std::string, int>{cc, currScore});
         }
 
-        std::ranges::sort(toReturn, [](const std::tuple<std::string, int, int> a, const std::tuple<std::string, int, int> b) {
-            auto A = std::get<1>(a);
-            auto B = std::get<1>(b);
+        //add missing teams
+        for (int t = 0; t < expectedTeams.size(); t++)
+        {
+            std::string lowerTeamCCode = expectedTeams[t];
+            std::transform(lowerTeamCCode.begin(), lowerTeamCCode.end(), lowerTeamCCode.begin(), ::tolower);
 
-            if (A == B) return std::get<2>(a) < std::get<2>(b);
-            return A < B;
+            bool doesTeamExist = false;
+            for (int p = 0; p < players.size(); p++)
+            {
+                if (std::get<0>(players[p]) == lowerTeamCCode)
+                    doesTeamExist = true;
+            }
+            
+            if (!doesTeamExist){
+                players.push_back(std::tuple<std::string, int>{lowerTeamCCode, 0});
+            }
+        }
+        
+        //sort by placement
+        std::ranges::sort(players, [](const std::tuple<std::string, int> a, const std::tuple<std::string, int> b) {
+            auto scoreA = std::get<1>(a);
+            auto scoreB = std::get<1>(b);
+
+            return scoreA < scoreB;
         });
+        
+        //calc windraw
+        if (type == ScoreSystemType::WinDraw || type == ScoreSystemType::WinDrawT2 || type == ScoreSystemType::WinDrawTimes2){
+            //get a list of all ties in the match
+            int currHighest = 0;
+            std::map<int, std::vector<std::pair<int, int>>> tiedScores;
+            for (int p = 0; p < players.size(); p++)
+            {
+                int score = p;
+                if (type == ScoreSystemType::WinDrawTimes2)
+                    score *= 2;
 
-        return Ok(toReturn);
-    },
-    [](auto) -> std::monostate {
-        return std::monostate();
+                if (currHighest == std::get<1>(players[p]) && currHighest != 0){
+                    if (tiedScores.contains(currHighest))
+                        tiedScores[currHighest].push_back(std::pair<int, int>{score, std::get<1>(players[p])});
+                    else
+                        tiedScores.insert(std::pair<int, std::vector<std::pair<int, int>>>{currHighest, std::vector<std::pair<int, int>>{{score, std::get<1>(players[p])}}});
+                }
+
+                currHighest = std::get<1>(players[p]);
+            }
+
+            //calc
+            for (int placement = 0; placement < players.size(); placement++)
+            {
+                std::string keyCC = std::get<0>(players[placement]);
+                int score = 0;
+
+                score = placement;
+                if (type == ScoreSystemType::WinDrawTimes2)
+                    score *= 2;
+
+                int playerScore = std::get<1>(players[placement]);
+
+                if (tiedScores.contains(playerScore)){
+                    int tiePoints = 0;
+                    for (int p = 0; p < tiedScores[playerScore].size(); p++)
+                    {
+                        tiePoints += tiedScores[playerScore][p].first;
+                    }
+                    score = tiePoints / tiedScores[playerScore].size();
+                }
+
+                bool found = false;
+
+                for (int c = 0; c < toReturn.size(); c++)
+                {
+                    if (std::get<0>(toReturn[c]) == keyCC){
+                        std::get<1>(toReturn[c]) += score;
+                        std::get<2>(toReturn[c]) += playerScore;
+                        found = true;
+                    }
+                }
+
+                if (!found)
+                    toReturn.push_back(std::tuple<std::string, int, int>{keyCC, score, playerScore});
+            }
+
+        }
+        //calc addition
+        else if (type == ScoreSystemType::Addition || type == ScoreSystemType::AdditionT2){
+            for (int placement = 0; placement < players.size(); placement++)
+            {
+                std::string keyCC = std::get<0>(players[placement]);
+                int score = std::get<1>(players[placement]);
+
+                bool found = false;
+
+                for (int c = 0; c < toReturn.size(); c++)
+                {
+                    if (std::get<0>(toReturn[c]) == keyCC){
+                        std::get<1>(toReturn[c]) += score;
+                        std::get<2>(toReturn[c]) += score;
+                        found = true;
+                    }
+                }
+
+                if (!found)
+                    toReturn.push_back(std::tuple<std::string, int, int>{keyCC, score, score});
+            }
+        }
+    }
+
+    std::ranges::sort(toReturn, [](const std::tuple<std::string, int, int> a, const std::tuple<std::string, int, int> b) {
+        auto A = std::get<1>(a);
+        auto B = std::get<1>(b);
+
+        if (A == B) return std::get<2>(a) < std::get<2>(b);
+        return A < B;
     });
+
+    co_return Ok(toReturn);
 }
 
 CCNode* data::createCircleGlow(ccColor3B color, float opacity){
@@ -903,99 +860,86 @@ std::string data::ScoreSystemTypeToString(ScoreSystemType type){
     }
 }
 
-MatchGroupsDataTask data::getMatchGroupsData(){
-        if (LoadedPlayers.size()){
-        return MatchGroupsDataTask::run(
-        [] (auto progress, auto hasBeenCancelled) -> MatchGroupsDataTask::Result{
-            return Ok(data::LoadedMatchGroups);
-        });
+MatchGroupsDataFuture data::getMatchGroupsData(){
+    if (LoadedPlayers.size()){
+        co_return Ok(data::LoadedMatchGroups);
     }
 
     web::WebRequest req = web::WebRequest();
 
     //req.param("key", apiKey);
 
-    return req.get(fmt::format("https://docs.google.com/spreadsheets/d/{}/gviz/tq?tqx=out:csv&sheet={}", SheetID, matchGroupsPageID)).map(
-    [] (web::WebResponse* res) -> Result<std::vector<MatchGroup>> {
+    auto res = co_await req.get(fmt::format("https://docs.google.com/spreadsheets/d/{}/gviz/tq?tqx=out:csv&sheet={}", SheetID, matchGroupsPageID));
 
-        GEODE_UNWRAP_INTO(auto MGString, res->string());
+    GEODE_CO_UNWRAP_INTO(auto MGString, res.string());
 
-        auto groups = std::vector<MatchGroup>{};
+    auto groups = std::vector<MatchGroup>{};
 
-        if (MGString.empty()){
-            return Err("failed getting match groups");
-        }
+    if (MGString.empty()){
+        co_return Err("failed getting match groups");
+    }
 
-        std::vector<std::vector<std::string>> values = convertRawData(MGString, true);
+    std::vector<std::vector<std::string>> values = convertRawData(MGString, true);
+    
+    for (int r = 0; r < values.size(); r++)
+    {
+        if (values[r].size() - 1 != 3) continue;
+
+        MatchGroup currMGroups;
         
-        for (int r = 0; r < values.size(); r++)
-        {
-            if (values[r].size() - 1 != 3) continue;
+        currMGroups.groupID = geode::utils::numFromString<int>(values[r][0]).unwrapOr(-1);
+        currMGroups.groupName = values[r][1];
 
-            MatchGroup currMGroups;
-            
-            currMGroups.groupID = geode::utils::numFromString<int>(values[r][0]).unwrapOr(-1);
-            currMGroups.groupName = values[r][1];
+        currMGroups.amountPass = geode::utils::numFromString<int>(values[r][2]).unwrapOr(-1);
 
-            currMGroups.amountPass = geode::utils::numFromString<int>(values[r][2]).unwrapOr(-1);
+        currMGroups.scoreType = static_cast<ScoreSystemType>(geode::utils::numFromString<int>(values[r][3]).unwrapOr(0));
 
-            currMGroups.scoreType = static_cast<ScoreSystemType>(geode::utils::numFromString<int>(values[r][3]).unwrapOr(0));
+        groups.push_back(currMGroups);
+    }
+    
+    LoadedMatchGroups.clear();
+    LoadedMatchGroups = groups;
 
-            groups.push_back(currMGroups);
-        }
-        
-        LoadedMatchGroups.clear();
-        LoadedMatchGroups = groups;
-
-        return Ok(groups);
-    },
-    [](auto) -> std::monostate {
-        return std::monostate();
-    });
+    co_return Ok(groups);
 }
 
-CurrentMatchTask data::getCurrentMatchData(std::string accessToken){
+CurrentMatchFuture data::getCurrentMatchData(std::string accessToken){
     web::WebRequest req = web::WebRequest();
 
     req.header("Authorization", "Bearer " + accessToken);
 
-    return req.get(fmt::format("https://sheets.googleapis.com/v4/spreadsheets/{}/values/{}?majorDimension=COLUMNS", matchSheetID, matchSheetName)).map(
-    [] (web::WebResponse* res) -> Result<std::map<std::string, std::pair<std::string, std::vector<std::string>>>> {
+    auto res = co_await req.get(fmt::format("https://sheets.googleapis.com/v4/spreadsheets/{}/values/{}?majorDimension=COLUMNS", matchSheetID, matchSheetName));
 
-        GEODE_UNWRAP_INTO(auto json, res->json());
-        
-        auto matchPlayers = std::map<std::string, std::pair<std::string, std::vector<std::string>>>{};
+    GEODE_CO_UNWRAP_INTO(auto json, res.json());
+    
+    auto matchPlayers = std::map<std::string, std::pair<std::string, std::vector<std::string>>>{};
 
-        GEODE_UNWRAP_INTO(auto vals, json.as<sheetValues>());
+    GEODE_CO_UNWRAP_INTO(auto vals, json.as<sheetValues>());
 
-        if (vals.range.empty())
-            return Err("Failed to fetch sheet data!");
+    if (vals.range.empty())
+        co_return Err("Failed to fetch sheet data!");
 
-        std::vector<std::vector<std::string>> values = vals.values;
+    std::vector<std::vector<std::string>> values = vals.values;
 
-        for (int r = columnsMinMax.x; r < values.size(); r++)
+    for (int r = columnsMinMax.x; r < values.size(); r++)
+    {
+        if (columnsMinMax.y < r) break;
+        if (!values[r].size()) continue;
+
+        if (values[r][1] == "-1") continue;
+        if (matchPlayers.contains(values[r][1])) continue;
+
+        matchPlayers.insert(std::pair<std::string, std::pair<std::string, std::vector<std::string>>>{values[r][1], std::pair<std::string, std::vector<std::string>>{data::columnNumberToLetter(r), std::vector<std::string>{}}});
+
+        for (int k = 1; k < values[r].size(); k++)
         {
-            if (columnsMinMax.y < r) break;
-            if (!values[r].size()) continue;
-
-            if (values[r][1] == "-1") continue;
-            if (matchPlayers.contains(values[r][1])) continue;
-
-            matchPlayers.insert(std::pair<std::string, std::pair<std::string, std::vector<std::string>>>{values[r][1], std::pair<std::string, std::vector<std::string>>{data::columnNumberToLetter(r), std::vector<std::string>{}}});
-
-            for (int k = 1; k < values[r].size(); k++)
-            {
-                matchPlayers[values[r][1]].second.push_back(values[r][k]);
-            }
+            matchPlayers[values[r][1]].second.push_back(values[r][k]);
         }
+    }
 
-        if (!matchPlayers.size()) return Err("No match players found!");
+    if (!matchPlayers.size()) co_return Err("No match players found!");
 
-        return Ok(matchPlayers);
-    },
-    [](auto) -> std::monostate {
-        return std::monostate();
-    });
+    co_return Ok(matchPlayers);
 }
 
 Result<std::tuple<int, int, int>> data::splitDate(std::string date){
@@ -1081,7 +1025,9 @@ void data::leaveMatch(){
 
     req.bodyJSON(j);
 
-    req.post(discordWebhookLink + discordWebhookSecret).listen([] (web::WebResponse* res) {});
+    async::spawn(
+        req.post(discordWebhookLink + discordWebhookSecret)
+    );
 
     isInMatch = false;
     CBFAllowed = false;
@@ -1133,8 +1079,6 @@ Result<> data::joinMatch(std::string joinCode){
     columnsMinMax.y = utils::numFromString<int>(secrets[9]).unwrapOr(-1);
     connectCheckCell = secrets[10];
 
-    web::WebRequest req = web::WebRequest();
-
     DiscordMessage message{};
 
     DiscordEmbed e = embedWithPlayerColor();
@@ -1145,61 +1089,58 @@ Result<> data::joinMatch(std::string joinCode){
 
     auto j = matjson::Value(message);
 
-    req.bodyJSON(j);
-
     connecting = true;
 
-    data::refreshAccessToken(sheetsClientID, sheetsClientSecret, sheetsRefreshToken).listen([](Result<std::string>* res){
-        if (res == nullptr)
-        {
-            data::checkConnectionComplete("Incorrect code! (might be expired)");
-            return;
-        }
-        if (!res->isOk())
-        {
-            data::checkConnectionComplete("Incorrect code! (might be expired)");
-            return;
-        }
+    arc::spawn(
+        []() -> arc::Future<> {
+            auto res = co_await data::refreshAccessToken(sheetsClientID, sheetsClientSecret, sheetsRefreshToken);
 
-        data::writeToGoogleSheet(matchSheetID, fmt::format("{}!{}:{}", matchSheetName, connectCheckCell, connectCheckCell), ":D", res->unwrap()).listen([](Result<>* didWrite){
-            if (didWrite == nullptr){
-                data::checkConnectionComplete("Connection Failed! (sheet result is null)");
-                return;
-            } 
-            if (didWrite->isErr()){
-                data::checkConnectionComplete("Connection Failed! " + didWrite->unwrapErr());
-                return;
+            if (res.isErr())
+            {
+                data::checkConnectionComplete("Incorrect code! (might be expired)");
+                co_return;
+            }
+
+            auto didWrite = co_await data::writeToGoogleSheet(matchSheetID, fmt::format("{}!{}:{}", matchSheetName, connectCheckCell, connectCheckCell), ":D", res.unwrap());
+            
+            if (didWrite.isErr()){
+                data::checkConnectionComplete("Connection Failed! " + didWrite.unwrapErr());
+                co_return;
             }
 
             data::sheetsConnectionCheck = true;
             data::checkConnectionComplete();
-        });
-    });
-
-    req.post(discordWebhookLink + val).listen(
-    [val] (web::WebResponse* res){
-        if (!res)
-            data::checkConnectionComplete("Connection Failed! (discord response is null)");
-
-        if (!res->ok())
-            data::checkConnectionComplete("Connection Failed! (discord response is error)");
-
-        auto json = res->json();
-
-        if (json.isOk())
-            data::checkConnectionComplete("Incorrect code! " + json.unwrap().dump());
-
-        discordWebhookSecret = val;
-        discordConnectionCheck = true;
-        if (data::getCBF()){
-            geode::Notification::create("You have CBF on! please disable it!", nullptr, 4)->show();
         }
-        else if (data::getCBFAllowed()){
-            geode::Notification::create("CBF is allowed this match :D", nullptr, 4)->show();
-        }
+    );
 
-        data::checkConnectionComplete();
-    });
+    arc::spawn(
+        [&, val, j]() -> arc::Future<> {
+            web::WebRequest req = web::WebRequest();
+            req.bodyJSON(j);
+            auto request = req.post(discordWebhookLink + val);
+
+            auto res = co_await request;
+
+            if (!res.ok())
+                data::checkConnectionComplete("Connection Failed! (discord response is error)");
+
+            auto json = res.json();
+
+            if (json.isOk())
+                data::checkConnectionComplete("Incorrect code! " + json.unwrap().dump());
+
+            discordWebhookSecret = val;
+            discordConnectionCheck = true;
+            if (data::getCBF()){
+                geode::Notification::create("You have CBF on! please disable it!", nullptr, 4)->show();
+            }
+            else if (data::getCBFAllowed()){
+                geode::Notification::create("CBF is allowed this match :D", nullptr, 4)->show();
+            }
+
+            data::checkConnectionComplete();
+        }
+    );
 
     return Ok();
 }
@@ -1236,28 +1177,24 @@ DiscordEmbed data::embedWithPlayerColor(){
     return toReturn;
 }
 
-Task<Result<>> data::SendDiscordMessage(DiscordMessage message){
+arc::Future<Result<>> data::SendDiscordMessage(DiscordMessage message){
     web::WebRequest req = web::WebRequest();
 
     req.bodyJSON(matjson::Value(message));
 
-    return req.post(discordWebhookLink + discordWebhookSecret).map(
-        [] (web::WebResponse* res) -> Result<> {
-            if (!res->ok()){
-                return Err("Connection Failed!");
-            }
+    auto res = co_await req.post(discordWebhookLink + discordWebhookSecret);
 
-            auto json = res->json();
+    if (!res.ok()){
+        co_return Err("Connection Failed!");
+    }
 
-            if (json.isOk()){
-                return Err("Incorrect Secret!");
-            }
+    auto json = res.json();
 
-            return Ok();
-        },
-        [](auto) -> std::monostate {
-            return std::monostate();
-        });
+    if (json.isOk()){
+        co_return Err("Incorrect Secret!");
+    }
+
+    co_return Ok();
 }
 
 int data::getCombo(int levelID, int precent){
@@ -1277,7 +1214,7 @@ int data::getCombo(int levelID, int precent){
     return currentCombo;
 }
 
-Task<Result<std::string>> data::refreshAccessToken(std::string clientId, std::string clientSecret, std::string refreshToken) {
+arc::Future<Result<std::string>> data::refreshAccessToken(std::string clientId, std::string clientSecret, std::string refreshToken) {
     web::WebRequest req = web::WebRequest();
 
     req.param("client_id", clientId);
@@ -1285,29 +1222,24 @@ Task<Result<std::string>> data::refreshAccessToken(std::string clientId, std::st
     req.param("refresh_token", refreshToken);
     req.param("grant_type", "refresh_token");
 
-    return req.post("https://oauth2.googleapis.com/token").map(
-    [] (web::WebResponse* res) -> Result<std::string> {
+    auto res = co_await req.post("https://oauth2.googleapis.com/token");
 
-        auto jsonRes = res->json();
-        if (jsonRes.isErr()) return Err("(refreshing) Invalid sheet data!");
-        
-        auto json = jsonRes.unwrap();
+    auto jsonRes = res.json();
+    if (jsonRes.isErr()) co_return Err("(refreshing) Invalid sheet data!");
+    
+    auto json = jsonRes.unwrap();
 
-        auto sheetObjRes = json.as<sheetRefreshedToken>();
-        if (sheetObjRes.isErr()) return Err("(refreshing) Invalid sheet obj data!");
+    auto sheetObjRes = json.as<sheetRefreshedToken>();
+    if (sheetObjRes.isErr()) co_return Err("(refreshing) Invalid sheet obj data!");
 
-        auto t = sheetObjRes.unwrap();
+    auto t = sheetObjRes.unwrap();
 
-        if (t.access_token.empty()) return Err("Failed getting access token!");
+    if (t.access_token.empty()) co_return Err("Failed getting access token!");
 
-        return Ok(t.access_token);
-    },
-    [](auto) -> std::monostate {
-        return std::monostate();
-    });
+    co_return Ok(t.access_token);
 }
 
-Task<Result<>> data::writeToGoogleSheet(std::string spreadsheetId, std::string range, std::string value, std::string accessToken) {
+arc::Future<Result<>> data::writeToGoogleSheet(std::string spreadsheetId, std::string range, std::string value, std::string accessToken) {
     web::WebRequest req = web::WebRequest();
 
     sheetValues values;
@@ -1321,29 +1253,24 @@ Task<Result<>> data::writeToGoogleSheet(std::string spreadsheetId, std::string r
 
     req.param("valueInputOption", "USER_ENTERED");
 
-    return req.put(fmt::format("https://sheets.googleapis.com/v4/spreadsheets/{}/values/{}", spreadsheetId, range)).map(
-    [] (web::WebResponse* res) -> Result<> {
+    auto res = co_await req.put(fmt::format("https://sheets.googleapis.com/v4/spreadsheets/{}/values/{}", spreadsheetId, range));
 
-        auto jsonRes = res->json();
-        if (jsonRes.isErr()) return Err("(writing) Invalid sheet data!");
-        
-        auto json = jsonRes.unwrap();
+    auto jsonRes = res.json();
+    if (jsonRes.isErr()) co_return Err("(writing) Invalid sheet data!");
+    
+    auto json = jsonRes.unwrap();
 
-        auto sheetObjRes = json.as<sheetWriteReport>();
-        if (sheetObjRes.isErr()){
-            log::info("{}", json.dump());
-            return Err("(writing) Invalid sheet obj data!");
-        }
+    auto sheetObjRes = json.as<sheetWriteReport>();
+    if (sheetObjRes.isErr()){
+        log::info("{}", json.dump());
+        co_return Err("(writing) Invalid sheet obj data!");
+    }
 
-        auto r = sheetObjRes.unwrap();
-        
-        if (r.spreadsheetId.empty()) return Err("failed writing to the sheet!");
+    auto r = sheetObjRes.unwrap();
+    
+    if (r.spreadsheetId.empty()) co_return Err("failed writing to the sheet!");
 
-        return Ok();
-    },
-    [](auto) -> std::monostate {
-        return std::monostate();
-    });
+    co_return Ok();
 }
 
 std::string data::columnNumberToLetter(int colNum) {
@@ -1357,46 +1284,44 @@ std::string data::columnNumberToLetter(int colNum) {
     return colLetter;
 }
 
-void data::SendSheetProgress(std::string message){
-    auto messageTask = data::refreshAccessToken(sheetsClientID, sheetsClientSecret, sheetsRefreshToken);
+arc::Future<Result<>> data::SendSheetProgress(std::string message){
+    auto res = co_await data::refreshAccessToken(sheetsClientID, sheetsClientSecret, sheetsRefreshToken);
+    
+    if (res.isErr())
+        co_return Err("Invalid access token.");
+    
+    auto accToken = res.unwrap();
 
-    messageTask.listen([message](Result<std::string>* res){
-        auto accToken = res->unwrapOr("-1");
+    auto res2 = co_await data::getCurrentMatchData(accToken);
+    if (res2.isErr())
+        co_return Err("Failed to get current sheet data.");
+        
+    auto currMatchPlayers = res2.unwrap();
 
-        if (accToken == "-1")
-            return;
+    auto accID = std::to_string(GJAccountManager::get()->m_accountID);
 
-        data::getCurrentMatchData(accToken).listen([accToken, message](Result<std::map<std::string, std::pair<std::string, std::vector<std::string>>>>* res2){
-            if (!res2->isOk())
-                return;
-                
-            auto currMatchPlayers = res2->unwrap();
+    if (currMatchPlayers.contains(accID)){
+        std::string rangeLetter = currMatchPlayers[accID].first;
+        int rangeNum = currMatchPlayers[accID].second.size() + 2;
 
-            auto accID = std::to_string(GJAccountManager::get()->m_accountID);
+        auto res3 = co_await data::writeToGoogleSheet(matchSheetID, fmt::format("{}!{}{}", matchSheetName, rangeLetter, rangeNum), message, accToken);
 
-            if (!currMatchPlayers.contains(accID))
-                //You are not a part of any ongoing match!
-                return;
+        if (res3.isOk()){
+            co_return Ok();
+        }   
+        else{
+            co_return Err(res3.unwrapErr());
+        }
+    }
 
-            std::string rangeLetter = currMatchPlayers[accID].first;
-            int rangeNum = currMatchPlayers[accID].second.size() + 2;
-
-            data::writeToGoogleSheet(matchSheetID, fmt::format("{}!{}{}", matchSheetName, rangeLetter, rangeNum), message, accToken).listen([rangeLetter, rangeNum](Result<>* res3){
-                if (res3->isOk()){
-                    log::info("written!");
-                }   
-                else
-                    log::info("{}", res3->unwrapErr());
-            });
-        });
-    });
+    co_return Err("Not part of match!");
 }
 
 bool data::getCBF(){
     if (getCBFAllowed()) return false;
 
     if (auto cbf = Loader::get()->getLoadedMod("syzzi.click_between_frames")){
-        if (!cbf->isEnabled())
+        if (!cbf->isOrWillBeEnabled())
             return false;
 
         if (cbf->getSettingValue<bool>("soft-toggle"))

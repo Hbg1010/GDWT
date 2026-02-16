@@ -4,16 +4,18 @@
 
 GDWTTeamLayer* GDWTTeamLayer::create(const Team& _team) {
     auto ret = new GDWTTeamLayer();
-    if (ret && ret->initAnchored(263, 210, _team, "square01_001.png", {0.f, 0.f, 94.f, 94.f})) {
+    if (ret && ret->init(_team)) {
         ret->autorelease();
         return ret;
     }
-    CC_SAFE_DELETE(ret);
+    delete ret;
     return nullptr;
 }
 
 
-bool GDWTTeamLayer::setup(const Team& _team){
+bool GDWTTeamLayer::init(const Team& _team){
+    if (!Popup::init(263, 210, "square01_001.png", {0.f, 0.f, 94.f, 94.f}))
+        return false;
 
     team = _team;
 

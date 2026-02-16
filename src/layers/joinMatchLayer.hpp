@@ -5,9 +5,9 @@
 
 using namespace geode::prelude;
 
-class joinMatchLayer : public Popup<>, public FLAlertLayerProtocol {
+class joinMatchLayer : public Popup, public FLAlertLayerProtocol {
     protected:
-        bool setup() override;
+        bool init() override;
 
         CCMenuItemSpriteExtra* joinButton;
         CCMenuItemSpriteExtra* leaveButton;
@@ -18,7 +18,6 @@ class joinMatchLayer : public Popup<>, public FLAlertLayerProtocol {
 
         FLAlertLayer* leaveMatchAlert;
 
-        EventListener<Task<Result<>>> discordMessageListener;
         bool connecting;
 
         void onJoinBtnClicked(CCObject*);

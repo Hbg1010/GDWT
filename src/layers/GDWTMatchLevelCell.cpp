@@ -8,7 +8,7 @@ GDWTMatchLevelCell* GDWTMatchLevelCell::create(Level _level, CCSize size, bool s
         ret->autorelease();
         return ret;
     }
-    CC_SAFE_DELETE(ret);
+    delete ret;
     return nullptr;
 }
 
@@ -276,10 +276,11 @@ bool GDWTMatchLevelCell::init(Level _level, CCSize size, bool s){
     }
 
     auto req = web::WebRequest();
-    downloadListener.bind([this](web::WebTask::Event* e){
-        if (auto res = e->getValue()){
-            if (res->ok()){
-                auto data = res->data();
+    downloadListener.spawn(
+        req.get(fmt::format("https://raw.githubusercontent.com/cdc-sys/level-thumbnails/main/thumbs/{}.png", level.levelID)),
+        [this](web::WebResponse res){
+            if (res.ok()){
+                auto data = res.data();
                 std::thread imageThread = std::thread([data,this](){
                     image = new CCImage();
                     image->autorelease();
@@ -292,8 +293,7 @@ bool GDWTMatchLevelCell::init(Level _level, CCSize size, bool s){
                 imageThread.detach();
             }
         }
-    });
-    downloadListener.setFilter(req.get(fmt::format("https://raw.githubusercontent.com/cdc-sys/level-thumbnails/main/thumbs/{}.png", level.levelID)));
+    );
 
     return true;
 };

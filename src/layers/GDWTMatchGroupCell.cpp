@@ -54,13 +54,14 @@ bool GDWTMatchGroupCell::init(const MatchGroup& _group, CCSize size, bool s){
     nameLabel->getInputNode()->getTextLabel()->setOpacity(255);
     this->addChild(nameLabel);
 
-    l.bind([this] (MatchesTask::Event* event){
-        if (auto _matches = event->getValue()){
-            auto matches = _matches->unwrapOrDefault();
+    l.spawn(
+        data::getMatchesData(),
+        [this] (MatchesFuture::Output _matches){
+            auto matches = _matches.unwrapOrDefault();
 
             if (!matches.size()){
-                if (_matches->isErr())
-                    data::sendError(_matches->unwrapErr());
+                if (_matches.isErr())
+                    data::sendError(_matches.unwrapErr());
                 return;
             }
 
@@ -86,9 +87,7 @@ bool GDWTMatchGroupCell::init(const MatchGroup& _group, CCSize size, bool s){
             matchsLabelBG->setPosition({30, 15});
             this->addChild(matchsLabelBG);
         }
-    });
-
-    l.setFilter(data::getMatchesData());
+    );
     
     return true;
 };

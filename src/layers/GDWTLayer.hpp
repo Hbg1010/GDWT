@@ -50,11 +50,11 @@ class GDWTLayer : public CCLayer {
 
         int scrollSwitch;
 
-        EventListener<MatchesTask> matchListener;
+        async::TaskHolder<MatchesFuture::Output> matchListener;
 
-        EventListener<TeamsTask> teamListener;
+        async::TaskHolder<TeamsFuture::Output> teamListener;
 
-        EventListener<MatchGroupsDataTask> MGListener;
+        async::TaskHolder<MatchGroupsDataFuture::Output> MGListener;
 
         void OnBackButton(CCObject*);
 

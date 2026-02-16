@@ -30,9 +30,9 @@ bool GDWTLayer::init(){
     sideArt->setScale(1.05f);
     addSideArt(sideArt, SideArt::All, SideArtStyle::LayerGray, false);
 
-    CCObject* child;
-    CCARRAY_FOREACH(sideArt->getChildren(), child){
-        static_cast<CCSprite*>(child)->setColor({ 151, 151, 151 });
+    for (const auto& child : sideArt->getChildrenExt<CCSprite*>())
+    {
+        child->setColor({ 151, 151, 151 });
     }
 
     sideArt->setID("side-art");
@@ -362,13 +362,14 @@ void GDWTLayer::keyBackClicked(){
 }
 
 void GDWTLayer::refreshMatchesList(int amountPerPage){
-    matchListener.bind([amountPerPage, this] (MatchesTask::Event* event){
-        if (auto matchesPRes = event->getValue()){
-            auto matches = matchesPRes->unwrapOrDefault();
+    matchListener.spawn(
+        data::getMatchesData(),
+        [amountPerPage, this] (MatchesFuture::Output matchesPRes){
+            auto matches = matchesPRes.unwrapOrDefault();
 
             if (!matches.size()){
-                if (matchesPRes->isErr())
-                    data::sendError(matchesPRes->unwrapErr());
+                if (matchesPRes.isErr())
+                    data::sendError(matchesPRes.unwrapErr());
                 return;
             }
 
@@ -419,11 +420,8 @@ void GDWTLayer::refreshMatchesList(int amountPerPage){
 
             matchesScrollLayer->m_contentLayer->updateLayout();
             matchesScrollLayer->moveToTop();
-            
         }
-    });
-
-    matchListener.setFilter(data::getMatchesData());
+    );
 }
 
 void GDWTLayer::MatchesListArrowLeft(CCObject*){
@@ -442,13 +440,14 @@ void GDWTLayer::MatchesListArrowRight(CCObject*){
 //
 
 void GDWTLayer::refreshTeamsList(int amountPerPage){
-    teamListener.bind([amountPerPage, this] (TeamsTask::Event* event){
-        if (auto teamsP = event->getValue()){
-            auto teams = teamsP->unwrapOrDefault();
+    teamListener.spawn(
+        data::getTeamsData(),
+        [amountPerPage, this] (TeamsFuture::Output teamsP){
+            auto teams = teamsP.unwrapOrDefault();
 
             if (!teams.size()){
-                if (teamsP->isErr())
-                    data::sendError(teamsP->unwrapErr());
+                if (teamsP.isErr())
+                    data::sendError(teamsP.unwrapErr());
                 return;
             }
 
@@ -488,9 +487,7 @@ void GDWTLayer::refreshTeamsList(int amountPerPage){
             teamsScrollLayer->m_contentLayer->updateLayout();
             teamsScrollLayer->moveToTop();
         }
-    });
-
-    teamListener.setFilter(data::getTeamsData());
+    );
 }
 
 void GDWTLayer::TeamsListArrowLeft(CCObject*){
@@ -506,13 +503,14 @@ void GDWTLayer::TeamsListArrowRight(CCObject*){
 //
 
 void GDWTLayer::refreshMatchGroupsList(int amountPerPage){
-    MGListener.bind([amountPerPage, this] (MatchGroupsDataTask::Event* event){
-        if (auto MGsP = event->getValue()){
-            auto MatchGroups = MGsP->unwrapOrDefault();
+    MGListener.spawn(
+        data::getMatchGroupsData(),
+        [amountPerPage, this] (MatchGroupsDataFuture::Output MGsP){
+            auto MatchGroups = MGsP.unwrapOrDefault();
 
             if (!MatchGroups.size()){
-                if (MGsP->isErr())
-                    data::sendError(MGsP->unwrapErr());
+                if (MGsP.isErr())
+                    data::sendError(MGsP.unwrapErr());
                 return;
             }
 
@@ -552,9 +550,7 @@ void GDWTLayer::refreshMatchGroupsList(int amountPerPage){
             matchGroupsScrollLayer->m_contentLayer->updateLayout();
             matchGroupsScrollLayer->moveToTop();
         }
-    });
-
-    MGListener.setFilter(data::getMatchGroupsData());
+    );
 }
 
 void GDWTLayer::MatchGroupsListArrowLeft(CCObject*){

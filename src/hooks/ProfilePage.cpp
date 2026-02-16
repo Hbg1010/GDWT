@@ -311,7 +311,7 @@ void GDWTProfilePage::onBadgeClicked(CCObject* sender){
     }   
 }
 */
-
+/*
 void GDWTProfilePage::isUserInBadge(const std::string& badgeID, const int& accountID, const Badge& badge) {
     bool found = false;
     data::getPlayersData().listen([&found, badgeID, accountID, badge] (Result<std::vector<PlayerData>>* playersData) {
@@ -642,3 +642,4 @@ $on_mod(Loaded) {
         }
     );
 }
+*/

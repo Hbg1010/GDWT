@@ -2,15 +2,18 @@
 
 MDAlertLayer* MDAlertLayer::create(const std::string& title, const std::string& description, const std::string& btn1Name, const std::function<void(bool)>& callback, const std::string& btn2Name) {
     auto ret = new MDAlertLayer();
-    if (ret && ret->initAnchored(320, 250, title, description, btn1Name, callback, btn2Name, "square01_001.png", {0.f, 0.f, 94.f, 94.f})) {
+    if (ret && ret->init(title, description, btn1Name, callback, btn2Name)) {
         ret->autorelease();
         return ret;
     }
-    CC_SAFE_DELETE(ret);
+    delete ret;
     return nullptr;
 }
 
-bool MDAlertLayer::setup(const std::string& title, const std::string& description, const std::string& btn1Name, const std::function<void(bool)>& callback, const std::string& btn2Name){
+bool MDAlertLayer::init(const std::string& title, const std::string& description, const std::string& btn1Name, const std::function<void(bool)>& callback, const std::string& btn2Name){
+    if (!Popup::init(320, 250, "square01_001.png", {0.f, 0.f, 94.f, 94.f}))
+        return false;
+        
     this->setTitle(title);
 
     m_closeBtn->setVisible(false);

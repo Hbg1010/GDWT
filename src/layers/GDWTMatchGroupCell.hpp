@@ -15,5 +15,5 @@ class GDWTMatchGroupCell : public CCNode {
 
         void onMoreClicked(CCObject*);
 
-        EventListener<MatchesTask> l;
+        async::TaskHolder<MatchesFuture::Output> l;
 };
