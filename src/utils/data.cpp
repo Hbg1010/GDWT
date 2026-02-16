@@ -1121,24 +1121,26 @@ Result<> data::joinMatch(std::string joinCode){
 
             auto res = co_await request;
 
-            if (!res.ok())
+            geode::queueInMainThread([res, val](){
+                if (!res.ok())
                 data::checkConnectionComplete("Connection Failed! (discord response is error)");
 
-            auto json = res.json();
+                auto json = res.json();
 
-            if (json.isOk())
-                data::checkConnectionComplete("Incorrect code! " + json.unwrap().dump());
+                if (json.isOk())
+                    data::checkConnectionComplete("Incorrect code! " + json.unwrap().dump());
 
-            discordWebhookSecret = val;
-            discordConnectionCheck = true;
-            if (data::getCBF()){
-                geode::Notification::create("You have CBF on! please disable it!", nullptr, 4)->show();
-            }
-            else if (data::getCBFAllowed()){
-                geode::Notification::create("CBF is allowed this match :D", nullptr, 4)->show();
-            }
+                discordWebhookSecret = val;
+                discordConnectionCheck = true;
+                if (data::getCBF()){
+                    geode::Notification::create("You have CBF on! please disable it!", nullptr, 4)->show();
+                }
+                else if (data::getCBFAllowed()){
+                    geode::Notification::create("CBF is allowed this match :D", nullptr, 4)->show();
+                }
 
-            data::checkConnectionComplete();
+                data::checkConnectionComplete();
+            });
         }
     );
 

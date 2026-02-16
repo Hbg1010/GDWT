@@ -1,5 +1,4 @@
 #include "../hooks/PlayLayer.hpp"
-#include "../utils/data.hpp"
 
 void GDWTPlayLayer::destroyPlayer(PlayerObject* player, GameObject* p1){
     PlayLayer::destroyPlayer(player, p1);
@@ -68,30 +67,32 @@ void GDWTPlayLayer::sendProgressMessage(int precent, GJGameLevel* level, int com
     message.embeds.push_back(embed);
 
     m_fields->listener.spawn(
-        [message, precent]() -> arc::Future<Result<>> {
-            auto discRes = co_await data::SendDiscordMessage(message);
-
-            auto sheetRes = co_await data::SendSheetProgress(std::to_string(precent));
-
-            std::string errMessage = "Failed to send message! failes: ";
-            bool isErr = false;
-
-            if (discRes.isErr()){
-                errMessage += fmt::format("discord: {}", discRes.unwrapErr());
-                isErr = true;
-            }
-            if (sheetRes.isErr()){
-                errMessage += fmt::format("sheets: {}", sheetRes.unwrapErr());
-                isErr = true;
-            }
-
-            if (isErr)
-                co_return Err(errMessage);
-            
-            co_return Ok();
-        },
+        sendMessagesFuture(message, precent),
         [](Result<> res){
 
         }
     );
+}
+
+arc::Future<Result<>> GDWTPlayLayer::sendMessagesFuture(DiscordMessage message, int precent){
+    auto discRes = co_await data::SendDiscordMessage(message);
+
+    auto sheetRes = co_await data::SendSheetProgress(std::to_string(precent));
+
+    std::string errMessage = "Failed to send message! failes: ";
+    bool isErr = false;
+
+    if (discRes.isErr()){
+        errMessage += fmt::format("discord: {}", discRes.unwrapErr());
+        isErr = true;
+    }
+    if (sheetRes.isErr()){
+        errMessage += fmt::format("sheets: {}", sheetRes.unwrapErr());
+        isErr = true;
+    }
+
+    if (isErr)
+        co_return Err(errMessage);
+    
+    co_return Ok();
 }

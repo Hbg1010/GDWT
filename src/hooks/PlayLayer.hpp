@@ -1,4 +1,5 @@
 #include <Geode/Geode.hpp>
+#include "../utils/data.hpp"
 
 using namespace geode::prelude;
 
@@ -18,4 +19,6 @@ class $modify(GDWTPlayLayer, PlayLayer) {
     void levelComplete();
 
     void sendProgressMessage(int precent, GJGameLevel* level, int combo);
+
+    arc::Future<Result<>> sendMessagesFuture(DiscordMessage message, int precent);
 };
