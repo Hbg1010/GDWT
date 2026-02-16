@@ -1055,20 +1055,6 @@ Result<> data::joinMatch(std::string joinCode){
 
     std::string val = fmt::format("{}/{}", secrets[0], secrets[1]);
 
-    std::string stringForCBF = secrets[2];
-    
-    auto numForCBF = utils::numFromString<int>(stringForCBF).unwrapOr(-1);
-
-    if (numForCBF == -1){
-        return Err("Invalid code!");
-    }
-    else if (numForCBF == 0){
-        CBFAllowed = false;
-    }
-    else{
-        CBFAllowed = true;
-    }
-
     sheetsClientID = secrets[3];
     sheetsClientSecret = secrets[4];
     sheetsRefreshToken = secrets[5];
@@ -1132,12 +1118,6 @@ Result<> data::joinMatch(std::string joinCode){
 
                 discordWebhookSecret = val;
                 discordConnectionCheck = true;
-                if (data::getCBF()){
-                    geode::Notification::create("You have CBF on! please disable it!", nullptr, 4)->show();
-                }
-                else if (data::getCBFAllowed()){
-                    geode::Notification::create("CBF is allowed this match :D", nullptr, 4)->show();
-                }
 
                 data::checkConnectionComplete();
             });
@@ -1317,29 +1297,6 @@ arc::Future<Result<>> data::SendSheetProgress(std::string message){
     }
 
     co_return Err("Not part of match!");
-}
-
-bool data::getCBF(){
-    if (getCBFAllowed()) return false;
-
-    if (auto cbf = Loader::get()->getLoadedMod("syzzi.click_between_frames")){
-        if (!cbf->isOrWillBeEnabled())
-            return false;
-
-        if (cbf->getSettingValue<bool>("soft-toggle"))
-            return false;
-
-        if (cbf->getSettingValue<bool>("click-on-steps"))
-            return false;
-
-        return true;
-    }
-
-    return false;
-}
-
-bool data::getCBFAllowed(){
-    return CBFAllowed;
 }
 
 void data::disable2point1Percent(GJGameLevel* level){
