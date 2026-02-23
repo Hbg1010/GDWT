@@ -1,5 +1,5 @@
 {
-	"geode": "5.0.0-beta.2",
+	"geode": "5.0.0",
 	"gd": {
 		"win": "2.2081",
 		"android": "2.2081",
@@ -8,14 +8,15 @@
 	},
 	"id": "abb2k.gdwt",
 	"name": "GD World Tournament",
-	"version": "v1.2.25-beta.1",
+	"version": "v1.2.26",
 	"developer": "abb2k",
 	"description": "Allows GDWT players to join GDWT events",
 	"links": {
 		"community": "https://discord.gg/qxaBVVds6e"
 	},
 	"dependencies": {
-		"geode.node-ids": ">=1.22.0"
+		"geode.node-ids": ">=1.22.0",
+		"jouca.badgesapi": ">=1.4.0"
     },
 	"tags": ["interface", "utility"],
 	"resources": {

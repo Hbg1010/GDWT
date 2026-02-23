@@ -1,3 +1,7 @@
+# v1.2.26
+- geode V5 support
+- badges API support re-added
+
 # v1.2.25-beta.1
 - support for GD version 2.2081
 - badges API support temporarily removed until it gets updated
