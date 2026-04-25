@@ -1,3 +1,6 @@
+# v1.2.27
+- added limit for 5% or less runs to not be sent by players
+
 # v1.2.26
 - geode V5 support
 - badges API support re-added
