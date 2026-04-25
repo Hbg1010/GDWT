@@ -10,12 +10,16 @@ void GDWTPlayLayer::destroyPlayer(PlayerObject* player, GameObject* p1){
     if (!m_fields->hasRespawned) return;
     m_fields->hasRespawned = false;
 
-    int combo = data::getCombo(this->m_level->m_levelID.value(), this->getCurrentPercentInt());
+    int percent = this->getCurrentPercentInt();
+
+    int combo = data::getCombo(this->m_level->m_levelID.value(), percent);
 
     if (!(m_fields->currentRunStartprecent == 0 && !m_isPracticeMode)) return;
     if (this->m_level->m_levelID == 0) return;
 
-    sendProgressMessage(this->getCurrentPercentInt(), this->m_level, combo);
+    if (percent <= 5) return;
+
+    sendProgressMessage(percent, this->m_level, combo);
 }
 
 void GDWTPlayLayer::resetLevel() {
